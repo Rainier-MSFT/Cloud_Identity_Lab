@@ -7,4 +7,4 @@ Smart provisioning of entire lab comprising of a DC, ADFS, WAP, MFA, RDS, and AP
 
 ![Cloud-Identity-Lab](DocImages/3.jpg)
 
-![Cloud-Identity-Lab](DocImages/4.jpg)
+![Cloud-Identity-Lab](DocImages/4.png)
