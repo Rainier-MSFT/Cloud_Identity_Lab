@@ -21,6 +21,7 @@ $LANSubnetIPBlock = "192.168.0.0/25" # Provide 108 hosts, leaving some for GW SN
 #########################################################################################################
 
 [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null
+$host.ui.RawUI.WindowTitle = "Cloud Identity Lab"
 
 CLS
 New-Item -path "$env:APPDATA\Windows Azure Powershell" -type directory -ErrorAction SilentlyContinue | Out-Null
@@ -41,14 +42,14 @@ if (-not ([bool](([System.Security.Principal.WindowsIdentity]::GetCurrent()).gro
 Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
 Write-Host " - Login with a Global Administrator account...." -NoNewline
 if ([string]::IsNullOrEmpty($(Get-AzureRmContext).Account)) {Login-AzureRmAccount}
-Write-Host "Done" -ForegroundColor Green
+Write-Host
 
 #Subsciption picker
 Try
 {       
     Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
     Write-Host " - Querying account for subscriptions...." -NoNewline
-	$Subs = Get-AzureRMSubscription
+	$Subs = Get-AzureRMSubscription -WA SilentlyContinue
  
     [void][reflection.assembly]::Load('System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089')
     $formShowmenu = New-Object 'System.Windows.Forms.Form'
@@ -721,8 +722,8 @@ else {
 #Create Int VNET Rule to allow RDP to all VMs
 #============================================
 Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
-Write-Host " RDP to VMs " -ForegroundColor Cyan -NoNewline
-Write-Host " - Generating Internal VNET Ruleset...." -NoNewline
+Write-Host " - Generating Internal VNET Ruleset: " -NoNewline
+Write-Host "RDP to VMs...." -ForegroundColor Cyan -NoNewline
 $arrVNETRulesInt = @()
 $INTVNETSR = New-AzureRmNetworkSecurityRuleConfig -WA 0 `
     -Name "allow-rdp-access" `
@@ -739,8 +740,8 @@ Write-Host "Done" -ForegroundColor Green
 #Create Int VNET Rule to allow 443 to WAP
 #========================================
 Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
-Write-Host " 443 to WAP " -ForegroundColor Cyan -NoNewline
-Write-Host " - Generating Internal VNET Ruleset...." -NoNewline
+Write-Host " - Generating Internal VNET Ruleset: " -NoNewline
+Write-Host "443 to WAP...." -ForegroundColor Cyan -NoNewline
 $INTVNETSR1 = New-AzureRmNetworkSecurityRuleConfig -WA 0 `
     -Name "allow-https-access" `
     -Description "Allow 443 to WAP" `
@@ -756,8 +757,8 @@ Write-Host "Done" -ForegroundColor Green
 #Create Int VNET Rule to allow 49443 to WAP
 #========================================
 Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
-Write-Host " 49443 to WAP " -ForegroundColor Cyan -NoNewline
-Write-Host " - Generating Internal VNET Ruleset...." -NoNewline
+Write-Host " - Generating Internal VNET Ruleset: " -NoNewline
+Write-Host "49443 to WAP.... " -ForegroundColor Cyan -NoNewline
 $INTVNETSR2 = New-AzureRmNetworkSecurityRuleConfig -WA 0 `
     -Name "allow-clientcertauth-access" `
     -Description "Allow 49443 to WAP" `
@@ -1017,46 +1018,46 @@ New-AzureLabWindowsServerVM `
 
 #Create TMG VM
 #==================
-New-AzureLabWindowsServerVM `
-    -VMName "TMG-01" `
-    -Location $Location `
-    -ResourceGroupName $ResourceGroupName `
-    -VNETId $VNETSubID `
-    -VNETSGId $INTVNETSG.Id `
-    -VMSize "Standard_A1" `
-    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.68") `
-    -LocalAdmin $Credentials `
-    -SKU "2008-R2-SP1-smalldisk" `
-    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
-    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+#New-AzureLabWindowsServerVM `
+#    -VMName "TMG-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_A1" `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.68") `
+#    -LocalAdmin $Credentials `
+#    -SKU "2008-R2-SP1-smalldisk" `
+#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
 #Create 2012 VM
 #==================
-New-AzureLabWindowsServerVM `
-    -VMName "ADFS-2012" `
-    -Location $Location `
-    -ResourceGroupName $ResourceGroupName `
-    -VNETId $VNETSubID `
-    -VNETSGId $INTVNETSG.Id `
-    -VMSize "Standard_A1" `
-    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.69") `
-    -LocalAdmin $Credentials `
-    -SKU "2012-datacenter-smalldisk" `
-    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
-    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+#New-AzureLabWindowsServerVM `
+#    -VMName "ADFS-2012" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_A1" `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.69") `
+#    -LocalAdmin $Credentials `
+#    -SKU "2012-datacenter-smalldisk" `
+#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
-#Create 2012 VM
-#==================
+#Create EXCH16-01 VM
+#=================
 New-AzureLabWindowsServerVM `
-    -VMName "ADFS-PROXY" `
+    -VMName "EXCH16-01" `
     -Location $Location `
     -ResourceGroupName $ResourceGroupName `
     -VNETId $VNETSubID `
     -VNETSGId $INTVNETSG.Id `
-    -VMSize "Standard_A1" `
-    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.70") `
+    -VMSize "Standard_D3_v2" `
+    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.71") `
     -LocalAdmin $Credentials `
-    -SKU "2012-datacenter-smalldisk" `
+    -SKU "2012-r2-datacenter-smalldisk" `
     -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
     -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
