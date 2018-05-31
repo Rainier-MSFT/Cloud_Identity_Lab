@@ -1,2 +1,2 @@
 # Cloud-Identity-Lab
-Smart provisioning of lab VMs comprising of DC, ADFS, WAP, MFA, RDS, and an APP node.
+Smart provisioning of entire lab comprising of a DC, ADFS, WAP, MFA, RDS, and APP VMs, into Azure RM.
