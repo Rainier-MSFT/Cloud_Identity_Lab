@@ -1,22 +1,20 @@
-﻿# Globals  
-#########################################################################################################
+﻿############# GLOBALS  ###################################################################################
 
 $ResourceGroupOwner = "Rainier"  # Name of resource group owner - Must be unique
-$labPrefix = "Wacketywack"  # Must be unique and cannot already exist as storage account name
-$DCName = "DC-01"   # Must be unique for region if want to RDP using DNS, instead of IP (E.g. <hostname>.uksouth.cloudapp.azure.com)
+$labPrefix = "Wacketywack"  # Must be unique and storage account with same name cannot already exist
+$DCName = "DC-01"   # Must be unique for region if want to RDP using public DNS, instead of IP (E.g. <hostname>.uksouth.cloudapp.azure.com)
 $ADForestName = "wacketywack.local"
-$VNetIPBlock = "192.168.0.0/24" # Try and avoid overlap between VNets in different RGs, by using diffrent 3rd octet if poss
-$LANSubnetIPBlock = "192.168.0.0/25" # Provide 108 hosts, leaving some for GW SNet
+$VNetIPBlock = "192.168.0.0/24" # Avoid overlap between VNets in different RGs, by using diffrent 3rd octet if poss
+$LANSubnetIPBlock = "192.168.0.0/25" # Provides 108 hosts, leaving some for GW SNet
 
 ## - Host names will need to contain role, so that script logic can apply function specific additions. E.g. MFA server will only be provisioned with MFAServer.exe package if "mfa" is in hostname. Same for RDS, etc. 
 ## - Some resources such as automation accounts are identified by name and can only exist once, Azure wide. Therefore Lab prefix must be different for every new enviroment being spun-up.
 ## - Script assumes that only one VNET exists for the enviroment, per RG
 ## - Note that if testing, DNS records for public IP's must be unique.E.g. If you have a VM defined with a hostname of "mfa-01" then a corresponding public DNS fqdn record will be created as "mfa-01.westeurope.cloudapp.azure.com", and the choosen location will be used to define the suffix. So you may find a dup record prevents the new VM from being instantiated.
 
-#########################################################################################################
-
-#Set-PSDebug -Trace 2 -step # Set-PSDebug -Trace 0
-#$DebugPreference="Continue"
+#############  Use for debugging  #######################################################################
+# Set-PSDebug -Trace 2 -step # Set-PSDebug -Trace 0
+# $DebugPreference="Continue"
 
 #########################################################################################################
 
@@ -28,14 +26,14 @@ New-Item -path "$env:APPDATA\Windows Azure Powershell" -type directory -ErrorAct
 Set-Content -path "$env:APPDATA\Windows Azure Powershell\AzureDataCollectionProfile.json" -value '{"enableAzureDataCollection":false}'
 
 ## Check if elevated
-Write-Host "`n[MAIN]:" -ForegroundColor Yellow -NoNewline
-Write-Host " - Check if session is elevated. " -NoNewline
-if (-not ([bool](([System.Security.Principal.WindowsIdentity]::GetCurrent()).groups -match "S-1-5-32-544"))) {
-    Write-Host "Not running as admin so exiting...`n" -ForegroundColor DarkGray
-    exit
-} else {
-    Write-Host "Done" -ForegroundColor Green
-}
+#Write-Host "`n[MAIN]:" -ForegroundColor Yellow -NoNewline
+#Write-Host " - Check if session is elevated. " -NoNewline
+#if (-not ([bool](([System.Security.Principal.WindowsIdentity]::GetCurrent()).groups -match "S-1-5-32-544"))) {
+#    Write-Host "Not running as admin so exiting...`n" -ForegroundColor DarkGray
+#    exit
+#} else {
+#    Write-Host "Done" -ForegroundColor Green
+#}
 
 #AuthN to Azure
 #======================================
