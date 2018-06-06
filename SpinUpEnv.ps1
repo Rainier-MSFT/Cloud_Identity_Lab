@@ -5,7 +5,7 @@ $labPrefix = "Wacketywack"  # Must be unique and storage account with same name 
 $DCName = "DC-01"   # Must be unique for region if want to RDP using public DNS, instead of IP (E.g. <hostname>.uksouth.cloudapp.azure.com)
 $ADForestName = "wacketywack.local"
 $VNetIPBlock = "192.168.0.0/24" # Avoid overlap between VNets in different RGs, by using diffrent 3rd octet if poss
-$LANSubnetIPBlock = "192.168.0.0/25" # Provides 108 hosts, leaving some for GW SNet
+$LANSubnetIPBlock = "192.168.0.0/25" # Provides 108 hosts, leaving plenty for GW SNet
 
 ## - Host names will need to contain role, so that script logic can apply function specific additions. E.g. MFA server will only be provisioned with MFAServer.exe package if "mfa" is in hostname. Same for RDS, etc. 
 ## - Some resources such as automation accounts are identified by name and can only exist once, Azure wide. Therefore Lab prefix must be different for every new enviroment being spun-up.
