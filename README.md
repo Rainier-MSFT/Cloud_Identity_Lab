@@ -7,7 +7,7 @@ Smart provisioning of an entire lab comprising of a DC, ADFS, WAP, MFA, RDS, MIM
 
 ![Cloud-Identity-Lab](DocImages/3.png)
 
-Script will also check for prescence of Remote Desktop Manager, and download if necessary, plus auto generates a 
-RDP collection file for all VMs in enviroment. 
+Script will also check for prescence of Remote Desktop Manager, and download if necessary, plus auto generate an 
+RDP collection file for all VMs in enviroment. Simples!
 
 ![Cloud-Identity-Lab](DocImages/4.png)
