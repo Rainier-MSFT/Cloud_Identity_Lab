@@ -1,20 +1,21 @@
-﻿############# GLOBALS  ###################################################################################
+﻿# Globals  
+#########################################################################################################
 
-$ResourceGroupOwner = "Rainier"  # Name of resource group owner - Must be unique
-$labPrefix = "Wacketywack"  # Must be unique and storage account with same name cannot already exist
-$DCName = "DC-01"   # Must be unique for region if want to RDP using public DNS, instead of IP (E.g. <hostname>.uksouth.cloudapp.azure.com)
+$ResourceGroupOwner = "Rainier"  # Name of resource group owner - Must be unique within a subscription or will prompt to update an exisiting Resource Group
+$labPrefix = "Wacketywack"  # Must be unique
+$DCName = "DC-01"   
 $ADForestName = "wacketywack.local"
-$VNetIPBlock = "192.168.0.0/24" # Avoid overlap between VNets in different RGs, by using diffrent 3rd octet if poss
-$LANSubnetIPBlock = "192.168.0.0/25" # Provides 108 hosts, leaving plenty for GW SNet
+$VNetIPBlock = "192.168.0.0/24" # Try and avoid overlapping between VNets in different RGs within a subscription, by occupying diffrent 3rd octet if poss
+$LANSubnetIPBlock = "192.168.0.0/25" # Provide 108 hosts, leaving some for GW SNet
 
-## - Host names will need to contain role, so that script logic can apply function specific additions. E.g. MFA server will only be provisioned with MFAServer.exe package if "mfa" is in hostname. Same for RDS, etc. 
-## - Some resources such as automation accounts are identified by name and can only exist once, Azure wide. Therefore Lab prefix must be different for every new enviroment being spun-up.
+## - Some resources such as automation accounts are defined by name and can only exist once, Azure wide. Therefore Lab prefix must be different for every new enviroment being spun-up.
 ## - Script assumes that only one VNET exists for the enviroment, per RG
-## - Note that if testing, DNS records for public IP's must be unique.E.g. If you have a VM defined with a hostname of "mfa-01" then a corresponding public DNS fqdn record will be created as "mfa-01.westeurope.cloudapp.azure.com", and the choosen location will be used to define the suffix. So you may find a dup record prevents the new VM from being instantiated.
+## - When choosing region be aware that UK South as a new region is fairly new, so runs somewhat leaner that other regions for now. Consider selecting Western EU instead
 
-#############  Use for debugging  #######################################################################
-# Set-PSDebug -Trace 2 -step # Set-PSDebug -Trace 0
-# $DebugPreference="Continue"
+#########################################################################################################
+
+#Set-PSDebug -Trace 2 -step # Set-PSDebug -Trace 0
+#$DebugPreference="Continue"
 
 #########################################################################################################
 
@@ -26,27 +27,27 @@ New-Item -path "$env:APPDATA\Windows Azure Powershell" -type directory -ErrorAct
 Set-Content -path "$env:APPDATA\Windows Azure Powershell\AzureDataCollectionProfile.json" -value '{"enableAzureDataCollection":false}'
 
 ## Check if elevated
-#Write-Host "`n[MAIN]:" -ForegroundColor Yellow -NoNewline
-#Write-Host " - Check if session is elevated. " -NoNewline
-#if (-not ([bool](([System.Security.Principal.WindowsIdentity]::GetCurrent()).groups -match "S-1-5-32-544"))) {
-#    Write-Host "Not running as admin so exiting...`n" -ForegroundColor DarkGray
-#    exit
-#} else {
-#    Write-Host "Done" -ForegroundColor Green
-#}
+Write-Host "`n[MAIN]:" -ForegroundColor Yellow -NoNewline
+Write-Host " - Check if session is elevated. " -NoNewline
+if (-not ([bool](([System.Security.Principal.WindowsIdentity]::GetCurrent()).groups -match "S-1-5-32-544"))) {
+    Write-Host "Not running as admin so exiting...`n" -ForegroundColor DarkGray
+    exit
+} else {
+    Write-Host "Done" -ForegroundColor Green
+}
 
 #AuthN to Azure
 #======================================
 Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
-Write-Host " - Login with a Global Administrator account...." -NoNewline
+Write-Host " - Login with a Global Administrator account....`n" -NoNewline
 if ([string]::IsNullOrEmpty($(Get-AzureRmContext).Account)) {Login-AzureRmAccount}
-Write-Host
 
 #Subsciption picker
 Try
 {       
     Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
     Write-Host " - Querying account for subscriptions...." -NoNewline
+    [Environment]::NewLine
 	$Subs = Get-AzureRMSubscription -WA SilentlyContinue
  
     [void][reflection.assembly]::Load('System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089')
@@ -74,8 +75,8 @@ Try
     $combobox1.Font = '6, 10'
     $combobox1.DropDownStyle = 'DropDownList'
     $combobox1.add_SelectedIndexChanged($combobox1_SelectedIndexChanged)
-    Write-Host "Done" -ForegroundColor Green
     $formShowmenu.ShowDialog() | out-null
+
 
     Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
     Write-Host " - Mapping session to target subscription...." -NoNewline
@@ -101,6 +102,8 @@ Function New-AzureLabWindowsServerVM {
         [Parameter(Mandatory=$true)][string]$VMSize,
         [Parameter(Mandatory=$true)][string]$PrivateIP,
         [Parameter(Mandatory=$true)][PSCredential]$LocalAdmin,
+        [Parameter(Mandatory=$false)][string]$PublisherName,
+        [Parameter(Mandatory=$false)][string]$Offer,
         [Parameter(Mandatory=$true)][string]$SKU,
         [Parameter(Mandatory=$true)][string]$StorageBlobURI,
         [switch]$JoinDomain,
@@ -111,21 +114,21 @@ Function New-AzureLabWindowsServerVM {
 		Write-Host "[CREATEVM]: " -ForegroundColor Yellow -NoNewline
         Write-Host "$VMName" -ForegroundColor Cyan -NoNewline
         Write-Host " - Querying VM status...." -NoNewline
-	    if(-Not (Find-AzureRmResource -ResourceType "Microsoft.Compute/virtualMachines" -ResourceGroupNameEquals $ResourceGroupName -ResourceNameContains $VMName)) {
-            Write-Host "Done" -ForegroundColor Green
+	    if(-Not (Get-AzureRmResource -ODataQuery "`$filter=resourcetype eq 'Microsoft.Compute/virtualMachines' and resourcegroup eq '$ResourceGroupName' and name eq '$VMName'")) {
+            Write-Host "Done" -ForegroundColor Green 
 
-            #Create Public IP Address
-            #========================
+            #Create Dynamic Public IP Interface
+            #==================================
             Write-Host "[CREATEVM]: " -ForegroundColor Yellow -NoNewline
             Write-Host "$VMName" -ForegroundColor Cyan -NoNewline
             Write-Host " - Creating Public IP...." -NoNewline
-			if(-Not (Find-AzureRmResource -ResourceType "Microsoft.Network/publicIPAddresses" -ResourceGroupNameEquals $ResourceGroupName -ResourceNameContains "$($VMName)-public-ip")) {
+			if(-Not (Get-AzureRmResource -ODataQuery "`$filter=resourcetype eq 'Microsoft.Network/publicIPAddresses' and resourcegroup eq '$ResourceGroupName' and name eq '$($VMName)-public-ip'")) {
 				try { 
                      $PIP = New-AzureRmPublicIpAddress -WA 0 `
 					-Name "$($VMName)-public-ip" `
 					-ResourceGroupName $ResourceGroupName `
 					-Location $Location `
-					-DomainNameLabel ($VMName + "-" + $labPrefix + "-rdp").ToLower() `
+					-DomainNameLabel ($VMName + "-" + $labPrefix).ToLower() `
 					-AllocationMethod Dynamic
                     $PIP = $PIP.id
 
@@ -144,7 +147,7 @@ Function New-AzureLabWindowsServerVM {
             Write-Host "[CREATEVM]: " -ForegroundColor Yellow -NoNewline
             Write-Host "$VMName" -ForegroundColor Cyan -NoNewline
             Write-Host " - Creating NIC...." -NoNewline
-			if(-Not (Find-AzureRmResource -ResourceType "Microsoft.Network/networkinterfaces" -ResourceGroupNameEquals $ResourceGroupName -ResourceNameContains "$($VMName)-nic")) {
+			if(-Not (Get-AzureRmResource -ODataQuery "`$filter=resourcetype eq 'Microsoft.Network/networkinterfaces' and resourcegroup eq '$ResourceGroupName' and name eq '$($VMName)-nic'")) {
                 try {
 				     $NIC = New-AzureRmNetworkInterface -WA 0 `
 					-Name "$($VMName)-nic" `
@@ -172,7 +175,11 @@ Function New-AzureLabWindowsServerVM {
             $OSDISKURI = $StorageBlobURI + "vhds/" + $VMName + "sys.vhd"
             $VM = New-AzureRmVMConfig -VMName $VMName -VMSize $VMSize -WA 0
             $VM = Set-AzureRmVMOperatingSystem -VM $VM -Windows -ComputerName $VMName -Credential $LocalAdmin -ProvisionVMAgent -EnableAutoUpdate -WinRMHttp -WA 0
-            $VM = Set-AzureRmVMSourceImage -VM $VM -PublisherName MicrosoftWindowsServer -Offer WindowsServer -Skus $SKU -Version "latest" -WA 0
+            if ($PublisherName) {
+                    $VM = Set-AzureRmVMSourceImage -VM $VM -PublisherName $PublisherName -Offer $Offer -Skus $SKU -Version "latest" -WA 0
+            } else {
+                    $VM = Set-AzureRmVMSourceImage -VM $VM -Skus $SKU -Version "latest" -WA 0
+            }
             $VM = Add-AzureRmVMNetworkInterface -VM $VM -Id $NIC.Id -WA 0
             $VM = Set-AzureRmVMOSDisk -VM $VM -Name "$($VMName)sys" -vhd $OSDISKURI -CreateOption fromImage -WA 0
             Write-Host "Done" -ForegroundColor Green
@@ -212,7 +219,7 @@ Function New-AzureLabWindowsServerVM {
                         Write-Host "Already exists. Moving on" -ForegroundColor DarkGray
                     }   else {
                         "`n"
-                        New-AzureStorageContainer -Name "scripts" -Context $StorageContext -WA 0
+                        New-AzureStorageContainer -Name "scripts2" -Context $StorageContext -WA 0
                     }
                 
                 if ($VMName -eq $DCName) {
@@ -277,6 +284,18 @@ Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Syste
 Install-WindowsFeature AD-Certificate,ADCS-Cert-Authority,ADCS-Web-Enrollment -IncludeManagementTools
 Install-AdcsCertificationAuthority -CAType EnterpriseRootCa -Force
 
+Import-Module BitsTransfer
+Start-BitsTransfer -Source "https://download.microsoft.com/download/B/0/0/B00291D0-5A83-4DE7-86F5-980BC00DE05A/AzureADConnect.msi" -Destination "C:\Users\Public\Desktop\Install Azure AD Connect.msi"
+
+$Shell = New-Object -ComObject ("WScript.Shell")
+$ShortCut = $Shell.CreateShortcut($env:USERPROFILE + "\Desktop\Azure AD Connect.lnk")
+$ShortCut.TargetPath = "C:\Program Files (x86)\Internet Explorer\iexplore.exe"
+$ShortCut.Arguments = "https://portal.azure.com/#blade/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/AzureADConnect"
+$ShortCut.WorkingDirectory = "C:\Program Files (x86)\Internet Explorer";
+$ShortCut.WindowStyle = 1;
+$ShortCut.IconLocation = "%SystemRoot%\system32\SHELL32.dll, 238";
+$ShortCut.Save()
+
 Stop-Transcript
 
 #Schedule Reboot
@@ -296,8 +315,9 @@ Restart-Computer -ComputerName . -Force
                     #============
                     Write-Host "[CREATEVM]: " -ForegroundColor Yellow -NoNewline
                     Write-Host "$VMName" -ForegroundColor Cyan -NoNewline
-                    Write-Host " - Uploading automation script to container....`n" -NoNewline
-                    Set-AzureStorageBlobContent -Container "scripts" -File $env:TEMP\New-Forest.ps1 -Blob "New-Forest.ps1" -Context $StorageContext -force -WA 0
+                    Write-Host " - Uploading automation script to container...." -NoNewline
+                    Set-AzureStorageBlobContent -Container "scripts" -File $env:TEMP\New-Forest.ps1 -Blob "New-Forest.ps1" -Context $StorageContext -force | out-null
+                    Write-Host "Done" -ForegroundColor Green
                                 
                     #Add custom script to DC
                     #=======================
@@ -316,12 +336,12 @@ Restart-Computer -ComputerName . -Force
                     Write-Host "Done" -ForegroundColor Green }
 
             elseif ($VMName -like "*adfs*") {
-                    
+                   
                     #Create Roles and Features script
                     #================================
                     Write-Host "[CREATEVM]: " -ForegroundColor Yellow -NoNewline
                     Write-Host "$VMName" -ForegroundColor Cyan -NoNewline
-                    Write-Host " - Provisioning VM with roles and features....`n"
+                    Write-Host " - Provisioning VM with roles and features...." -NoNewline
                     $RolesScript = 
 @'
 
@@ -342,6 +362,9 @@ Set-ItemProperty -Path $UserKey -Name "IsInstalled" -Value 0
 
 Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "ConsentPromptBehaviorAdmin" -Value 00000000
 
+Import-Module BitsTransfer
+Start-BitsTransfer -Source "https://download.microsoft.com/download/9/F/5/9F53F124-C990-42D2-8A32-6D352A67762B/AdHealthAdfsAgentSetup.exe" -Destination "C:\Users\Public\Desktop\Install Connect Health.exe"
+
 Stop-Transcript
 
 #Schedule Reboot
@@ -351,10 +374,12 @@ Restart-Computer -ComputerName . -Force
 
                     #Push script
                     #============
+                    Write-Host "Done" -Foregroundcolor Green
                     $RolesScript | Out-File $env:TEMP\ADFS-Role.ps1 -Force
                     Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
-                    Write-Host " - Uploading automation script to container....`n" -NoNewline
-                    Set-AzureStorageBlobContent -Container "scripts" -File $env:TEMP\ADFS-Role.ps1 -Blob "ADFS-Role.ps1" -Context $StorageContext -force -WA 0
+                    Write-Host " - Uploading automation script to container...." -NoNewline
+                    Set-AzureStorageBlobContent -Container "scripts" -File $env:TEMP\ADFS-Role.ps1 -Blob "ADFS-Role.ps1" -Context $StorageContext -force | out-null
+                    Write-Host "Done" -Foregroundcolor Green
 
                     #Add custom script to VM
                     #=======================
@@ -379,7 +404,7 @@ Restart-Computer -ComputerName . -Force
                     #================================
                     Write-Host "[CREATEVM]: " -ForegroundColor Yellow -NoNewline
                     Write-Host "$VMName" -ForegroundColor Cyan -NoNewline
-                    Write-Host " - Provisioning VM with roles and features....`n"
+                    Write-Host " - Provisioning VM with roles and features...." -NoNewline
                     $RolesScript = 
 @'
 
@@ -400,6 +425,9 @@ Set-ItemProperty -Path $UserKey -Name "IsInstalled" -Value 0
 
 Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "ConsentPromptBehaviorAdmin" -Value 00000000
 
+Import-Module BitsTransfer
+Start-BitsTransfer -Source "https://download.microsoft.com/download/9/F/5/9F53F124-C990-42D2-8A32-6D352A67762B/AdHealthAdfsAgentSetup.exe" -Destination "C:\Users\Public\Desktop\Install Connect Health.exe"
+
 Stop-Transcript
 
 #Schedule Reboot
@@ -409,10 +437,11 @@ Restart-Computer -ComputerName . -Force
 
                     #Push script
                     #============
+                    Write-Host "Done" -Foregroundcolor Green
                     $RolesScript | Out-File $env:TEMP\WAP-Role.ps1 -Force
                     Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
-                    Write-Host " - Uploading script to container....`n" -NoNewline
-                    Set-AzureStorageBlobContent -Container "scripts" -File $env:TEMP\WAP-Role.ps1 -Blob "WAP-Role.ps1" -Context $StorageContext -force -WA 0
+                    Write-Host " - Uploading script to container...." -NoNewline
+                    Set-AzureStorageBlobContent -Container "scripts" -File $env:TEMP\WAP-Role.ps1 -Blob "WAP-Role.ps1" -Context $StorageContext -force | out-null
                     Write-Host "Done" -Foregroundcolor Green
 
                     #Add custom script to VM
@@ -437,7 +466,7 @@ Restart-Computer -ComputerName . -Force
                     #================================
                     Write-Host "[CREATEVM]: " -ForegroundColor Yellow -NoNewline
                     Write-Host "$VMName" -ForegroundColor Cyan -NoNewline
-                    Write-Host " - Provisioning VM with roles and features....`n"
+                    Write-Host " - Provisioning VM with roles and features...." -NoNewline
                     $RolesScript = 
 @'
 
@@ -463,7 +492,7 @@ Import-Module BitsTransfer
 Start-BitsTransfer -Source "https://download.microsoft.com/download/9/E/0/9E006C56-BFDE-4802-8683-201A35C3ED68/MultiFactorAuthenticationServerSetup.exe" -Destination "C:\Users\Public\Desktop\MultiFactorAuthenticationServerSetup.exe"
 
 $Shell = New-Object -ComObject ("WScript.Shell")
-$ShortCut = $Shell.CreateShortcut($env:USERPROFILE + "\Desktop\MFAServer Blade.lnk")
+$ShortCut = $Shell.CreateShortcut("C:\Users\Public\Desktop\MFAServer Blade.lnk")
 $ShortCut.TargetPath = "C:\Program Files (x86)\Internet Explorer\iexplore.exe"
 $ShortCut.Arguments = "https://portal.azure.com/#blade/Microsoft_AAD_IAM/MultifactorAuthenticationMenuBlade/ServerSettings/fromProviders//hasMFALicense/true"
 $ShortCut.WorkingDirectory = "C:\Program Files (x86)\Internet Explorer";
@@ -480,10 +509,11 @@ Restart-Computer -ComputerName . -Force
 
                     #Push script
                     #============
+                    Write-Host "Done" -Foregroundcolor Green
                     $RolesScript | Out-File $env:TEMP\MFA-Role.ps1 -Force
                     Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
-                    Write-Host " - Uploading script to container....`n" -NoNewline
-                    Set-AzureStorageBlobContent -Container "scripts" -File $env:TEMP\MFA-Role.ps1 -Blob "MFA-Role.ps1" -Context $StorageContext -force -WA 0
+                    Write-Host " - Uploading script to container...." -NoNewline
+                    Set-AzureStorageBlobContent -Container "scripts" -File $env:TEMP\MFA-Role.ps1 -Blob "MFA-Role.ps1" -Context $StorageContext -force | out-null
                     Write-Host "Done" -Foregroundcolor Green
 
                     #Add custom script to VM
@@ -507,7 +537,7 @@ Restart-Computer -ComputerName . -Force
                     #================================
                     Write-Host "[CREATEVM]: " -ForegroundColor Yellow -NoNewline
                     Write-Host "$VMName" -ForegroundColor Cyan -NoNewline
-                    Write-Host " - Provisioning VM with roles and features....`n"
+                    Write-Host " - Provisioning VM with roles and features...." -NoNewline
                     $RolesScript = 
 @'
 
@@ -532,15 +562,6 @@ Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Syste
 Import-Module BitsTransfer
 Start-BitsTransfer -Source "https://download.microsoft.com/download/7/4/5/745F8FD4-C3B3-4E97-8702-8359CB4DF947/TMG_ENU_SE_EVAL_AMD64.exe" -Destination "C:\Users\Public\Desktop\TMG_ENU_SE_EVAL_AMD64.exe"
 
-$Shell = New-Object -ComObject ("WScript.Shell")
-$ShortCut = $Shell.CreateShortcut($env:USERPROFILE + "\Desktop\MFAServer Blade.lnk")
-$ShortCut.TargetPath = "C:\Program Files (x86)\Internet Explorer\iexplore.exe"
-$ShortCut.Arguments = "https://portal.azure.com/#blade/Microsoft_AAD_IAM/MultifactorAuthenticationMenuBlade/ServerSettings/fromProviders//hasMFALicense/true"
-$ShortCut.WorkingDirectory = "C:\Program Files (x86)\Internet Explorer";
-$ShortCut.WindowStyle = 1;
-$ShortCut.IconLocation = "iexplore.exe, 0";
-$ShortCut.Save()
-
 Stop-Transcript
 
 #Schedule Reboot
@@ -550,10 +571,11 @@ Restart-Computer -ComputerName . -Force
 
                     #Push script
                     #============
+                    Write-Host "Done" -Foregroundcolor Green
                     $RolesScript | Out-File $env:TEMP\TMG-Role.ps1 -Force
                     Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
-                    Write-Host " - Uploading script to container....`n" -NoNewline
-                    Set-AzureStorageBlobContent -Container "scripts" -File $env:TEMP\TMG-Role.ps1 -Blob "TMG-Role.ps1" -Context $StorageContext -force -WA 0
+                    Write-Host " - Uploading script to container...." -NoNewline
+                    Set-AzureStorageBlobContent -Container "scripts" -File $env:TEMP\TMG-Role.ps1 -Blob "TMG-Role.ps1" -Context $StorageContext -force | out-null
                     Write-Host "Done" -Foregroundcolor Green
 
                     #Add custom script to VM
@@ -576,7 +598,7 @@ Restart-Computer -ComputerName . -Force
                     #================================
                     Write-Host "[CREATEVM]: " -ForegroundColor Yellow -NoNewline
                     Write-Host "$VMName" -ForegroundColor Cyan -NoNewline
-                    Write-Host " - Provisioning VM with roles and features....`n"
+                    Write-Host " - Provisioning VM with roles and features...." -NoNewline
                     $RolesScript = 
 @'
 
@@ -603,10 +625,11 @@ Restart-Computer -ComputerName . -Force
 
                     #Push script
                     #============
+                    Write-Host "Done" -Foregroundcolor Green
                     $RolesScript | Out-File $env:TEMP\RDS-Role.ps1 -Force
                     Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
-                    Write-Host " - Uploading script to container....`n" -NoNewline
-                    Set-AzureStorageBlobContent -Container "scripts" -File $env:TEMP\RDS-Role.ps1 -Blob "RDS-Role.ps1" -Context $StorageContext -force -WA 0
+                    Write-Host " - Uploading script to container...." -NoNewline
+                    Set-AzureStorageBlobContent -Container "scripts" -File $env:TEMP\RDS-Role.ps1 -Blob "RDS-Role.ps1" -Context $StorageContext -force | out-null
                     Write-Host "Done" -Foregroundcolor Green
 
                     #Add custom script to VM
@@ -624,7 +647,59 @@ Restart-Computer -ComputerName . -Force
                            -ContainerName "scripts" #-Verbose
                     Write-Host "Done" -ForegroundColor Green
                     }
+                    elseif ($Offer -eq "MicrosoftSharePointServer" -and $SKU -eq "2016" -or "2013") {
+                    #Create Roles and Features script
+                    #================================
+                    Write-Host "[CREATEVM]: " -ForegroundColor Yellow -NoNewline
+                    Write-Host "$VMName" -ForegroundColor Cyan -NoNewline
+                    Write-Host " - Provisioning VM with roles and features...." -NoNewline
+                    $RolesScript = 
+@'
 
+$logDirectory = "C:\logs"
+New-Item -ItemType Directory -Path $logDirectory -Force
+Start-Transcript -Path "$logDirectory\Roles.log"
+
+$AdminKey = "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}"
+$UserKey = "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}"
+Set-ItemProperty -Path $AdminKey -Name "IsInstalled" -Value 0
+Set-ItemProperty -Path $UserKey -Name "IsInstalled" -Value 0
+
+Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "ConsentPromptBehaviorAdmin" -Value 00000000d:
+Copy-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Microsoft SharePoint 2013 Products\*.*" -Destination "C:\Users\Public\Desktop\"
+Copy-Item -Path "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Microsoft SharePoint 2016 Products\*.*" -Destination "C:\Users\Public\Desktop\"
+
+Stop-Transcript
+
+#Schedule Reboot
+Start-Sleep -Seconds 60
+Restart-Computer -ComputerName . -Force 
+'@ 
+
+                    #Push script
+                    #============
+                    Write-Host "Done" -Foregroundcolor Green
+                    $RolesScript | Out-File $env:TEMP\SP-Role.ps1 -Force
+                    Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
+                    Write-Host " - Uploading script to container...." -NoNewline
+                    Set-AzureStorageBlobContent -Container "scripts" -File $env:TEMP\SP-Role.ps1 -Blob "SP-Role.ps1" -Context $StorageContext -force | out-null
+                    Write-Host "Done" -Foregroundcolor Green
+
+                    #Add custom script to VM
+                    #=======================
+                    Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
+                    Write-Host " - Adding custom extension to VM...." -NoNewline
+                    $Ext = Set-AzureRmVMCustomScriptExtension -WA 0 `
+                           -ResourceGroupName $ResourceGroupName `
+                           -VMName $VMName `
+                           -Name "$($labPrefix)-Roles" `
+                           -Location $VMInfo.Location `
+                           -StorageAccountName $STORAGE.StorageAccountName `
+                           -StorageAccountKey $Key `
+                           -FileName "SP-Role.ps1" `
+                           -ContainerName "scripts" #-Verbose
+                    Write-Host "Done" -ForegroundColor Green
+                    }
 
 
 }  else {
@@ -701,7 +776,7 @@ else {
 #======================================================
 Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
 Write-Host " - Creating Automation Account...." -NoNewline
-if(-not (Find-AzureRmResource -ResourceGroupNameContains $ResourceGroupName -ResourceType "Microsoft.Automation/automationAccounts" -ResourceNameContains "$($labPrefix)-aa" -WA 0)) {
+if(-not (Get-AzureRmResource -ODataQuery "`$filter=resourcetype eq 'Microsoft.Automation/automationAccounts' and resourcegroup eq '$ResourceGroupName' and name eq '$($labPrefix)-aa'" -WA 0)) {
     Try {    
         $AUTOACC = New-AzureRmAutomationAccount -ResourceGroupName $ResourceGroupName -Name "$($labPrefix)-aa" -Location $Location -WA 0
         Write-Host "Done" -ForegroundColor Green
@@ -720,8 +795,8 @@ else {
 #Create Int VNET Rule to allow RDP to all VMs
 #============================================
 Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
-Write-Host " - Generating Internal VNET Ruleset: " -NoNewline
-Write-Host "RDP to VMs...." -ForegroundColor Cyan -NoNewline
+Write-Host " RDP to VMs " -ForegroundColor Cyan -NoNewline
+Write-Host " - Generating Internal VNET Ruleset...." -NoNewline
 $arrVNETRulesInt = @()
 $INTVNETSR = New-AzureRmNetworkSecurityRuleConfig -WA 0 `
     -Name "allow-rdp-access" `
@@ -738,8 +813,8 @@ Write-Host "Done" -ForegroundColor Green
 #Create Int VNET Rule to allow 443 to WAP
 #========================================
 Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
-Write-Host " - Generating Internal VNET Ruleset: " -NoNewline
-Write-Host "443 to WAP...." -ForegroundColor Cyan -NoNewline
+Write-Host " 443 to WAP " -ForegroundColor Cyan -NoNewline
+Write-Host " - Generating Internal VNET Ruleset...." -NoNewline
 $INTVNETSR1 = New-AzureRmNetworkSecurityRuleConfig -WA 0 `
     -Name "allow-https-access" `
     -Description "Allow 443 to WAP" `
@@ -755,8 +830,8 @@ Write-Host "Done" -ForegroundColor Green
 #Create Int VNET Rule to allow 49443 to WAP
 #========================================
 Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
-Write-Host " - Generating Internal VNET Ruleset: " -NoNewline
-Write-Host "49443 to WAP.... " -ForegroundColor Cyan -NoNewline
+Write-Host " 49443 to WAP " -ForegroundColor Cyan -NoNewline
+Write-Host " - Generating Internal VNET Ruleset...." -NoNewline
 $INTVNETSR2 = New-AzureRmNetworkSecurityRuleConfig -WA 0 `
     -Name "allow-clientcertauth-access" `
     -Description "Allow 49443 to WAP" `
@@ -773,7 +848,7 @@ Write-Host "Done" -ForegroundColor Green
 #==========================
 Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
 Write-Host " - Creating Network Security Group (NSG) & Rules...." -NoNewline
-if(-not (Find-AzureRmResource -ResourceType "Microsoft.Network/networkSecurityGroups" -ResourceNameContains "$($labPrefix)-Int-NSG" -ResourceGroupNameContains $ResourceGroupName -ErrorAction SilentlyContinue -WA 0)) {
+if(-not (Get-AzureRmResource -ODataQuery "`$filter=resourcetype eq 'Microsoft.Network/networkSecurityGroups' and resourcegroup eq '$ResourceGroupName' and name eq '$($labPrefix)-Int-NSG'" -ea SilentlyContinue -WA 0)) {
 	$INTVNETSG = New-AzureRmNetworkSecurityGroup -WA 0 `
 	-Name "$($labPrefix)-Int-NSG" `
 	-ResourceGroupName $ResourceGroupName `
@@ -804,7 +879,7 @@ Write-Host " - Creating VNET Subnet...." -NoNewline
 #===========
 Write-Host "[CREATEINFRA]:" -ForegroundColor Yellow -NoNewline
 Write-Host " - Creating VNET...." -NoNewline
-if (-not (Find-AzureRmResource -ResourceGroupNameContains $ResourceGroupName -ResourceType "Microsoft.Network/virtualNetworks" -ResourceNameContains "$($labPrefix)-VNET" -WA 0)) {
+if (-not (Get-AzureRmResource -ODataQuery "`$filter=resourcetype eq 'Microsoft.Network/virtualNetworks' and resourcegroup eq '$ResourceGroupName' and name eq '$($labPrefix)-VNET'" -WA 0)) {
         $VNET = New-AzureRmVirtualNetwork -WA 0 `
 			-Name "$($labPrefix)-VNET" `
 			-ResourceGroupName $ResourceGroupName `
@@ -823,11 +898,11 @@ else {
 		$VNETSubID = $VNET.Subnets[0].Id 
 }
 
-#Create Shared Storage Account # Name used MUST be unique!
-#=========================================================
+#Create Shared Storage Account
+#=============================
 Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
 Write-Host " - Creating Shared Storage...." -NoNewline
-if (-not (Find-AzureRmResource -ResourceGroupNameContains $ResourceGroupName -ResourceType "Microsoft.Storage/storageAccounts" -ResourceNameContains "$($labPrefix)storage" -WA 0)) {
+if (-not (Get-AzureRmResource -ODataQuery "`$filter=resourcetype eq 'Microsoft.Storage/storageAccounts' and resourcegroup eq '$ResourceGroupName' and name eq '$($labPrefix)storage'" -WA 0)) {
 	try {
         $STORAGE = New-AzureRmStorageAccount -WA 0 `
 		        -ResourceGroupName $ResourceGroupName `
@@ -838,7 +913,7 @@ if (-not (Find-AzureRmResource -ResourceGroupNameContains $ResourceGroupName -Re
 } 
 catch {
     Write-Host "Oh no...Looks like a storage account named ""$($labPrefix)storage"" may already exists -  Exiting..." -ForegroundColor Red
-    #Write-Host "Error returned - $_.Exception.Message"
+    Write-Host "Please use a different Oh no...Looks like a storage account named ""$($labPrefix)storage"" may already exists -  Exiting..." -ForegroundColor Red
     Break
     }	
 }
@@ -847,11 +922,185 @@ else {
     $STORAGE = Get-AzureRmStorageAccount -ResourceGroupName $ResourceGroupName | ? {$_.StorageAccountName -eq "$($labPrefix)storage"}
 }
 
+# Download RDC Manager to folder on desktop and generate VM file 
+#===============================================================
+function Get-AzureRmVmEndpoint 
+{ 
+    [CmdletBinding()] 
+    param( 
+        [string]$ResourceGroupName = @()
+    ) 
+ 
+    $tempFile = "$env:TEMP\$([System.Guid]::NewGuid().ToString()).rdp" 
+ 
+    $ResourceGroupName | 
+    ForEach-Object -Process { 
+         $ResourceGroupName = $_
+        
+        Write-Progress -Activity 'Getting VMs from Resource Group' -Status $ResourceGroupName 
+ 
+        $rgVmName = ( 
+            Get-AzureRmVm -ResourceGroupName $ResourceGroupName |  
+            Sort-Object -Property Name 
+        ).Name | 
+        Sort-Object 
+ 
+        if ($rgvmName) 
+        { 
+            $rgVmName | 
+            Where-Object -FilterScript { $_ } | 
+            ForEach-Object -Process { 
+                $rgVm = $_ 
+ 
+                Write-Progress -Id 1 -Activity 'Getting endpoint from' -Status $rgVm 
+ 
+                Get-AzureRmRemoteDesktopFile -ResourceGroupName $ResourceGroupName -Name $rgvm -LocalPath $tempFile -ErrorAction SilentlyContinue 
+                [string]$DNSAddress = (Get-Content -Path $tempFile) -match 'full address:s:' -replace 'full address:s:' 
+                ($DNSAddress, $port) = $DNSAddress.Split(':', 2) 
+                New-Object -TypeName psobject -Property @{ 
+                    ComputerName = $rgVm -as [string] 
+                    ResourceGroup = $ResourceGroupName -as [string] 
+                    DNSAddress = $DNSAddress -as [string] 
+                    Port = $port -as [int] 
+                } 
+            }
+        }
+    }
+
+    Remove-Item -Path $tempFile 
+}
+
+function New-AzureRmVmRdg 
+{ 
+    [CmdletBinding()]  
+    param( 
+ 
+        [String]$ResourceGroupName = @()
+    ) 
+     
+    function New-RdgXml 
+    { 
+
+        # Create Xml doc
+ 
+        [CmdletBinding()]  
+        param ( 
+            [Alias('Name')] 
+            [String]$FileElementName = 'RDG' 
+        ) 
+ 
+        $FileElementName = [System.Security.SecurityElement]::Escape($FileElementName) 
+ 
+        @" 
+<?xml version="1.0" encoding="utf-8"?>
+<RDCMan programVersion="2.7" schemaVersion="3"> 
+    <file> 
+        <credentialsProfiles /> 
+        <properties> 
+            <expanded>False</expanded> 
+            <name>$FileElementName</name> 
+        </properties> 
+    </file> 
+    <connected /> 
+    <favorites /> 
+    <recentlyUsed /> 
+</RDCMan>     
+"@ -as [xml] 
+    } 
+ 
+    function Get-RdgGroupInnerXml 
+    { 
+
+        # populate Group XmlElement's InnerXML
+ 
+        [CmdletBinding()] 
+        param ( 
+            [Parameter(Mandatory=$true, Position = 0)] 
+            [Alias('Name')] 
+            [String]$GroupElementName 
+        ) 
+ 
+        $GroupElementName = [System.Security.SecurityElement]::Escape($GroupElementName) 
+ 
+        @" 
+<properties> 
+    <expanded>False</expanded> 
+    <name>$GroupElementName</name> 
+</properties> 
+"@         
+    } 
+ 
+    function Get-ServerElementInnerXml 
+    { 
+
+        # populate Server XmlElement's InnerXML
+ 
+        [CmdletBinding()] 
+        param ( 
+            [Parameter(Mandatory=$true, Position = 0)] 
+            [Alias('DNSAddress', 'Name')] 
+            [String]$ServerName, 
+ 
+            [Parameter(Position = 1)] 
+            [string]$DisplayName 
+        ) 
+ 
+        if (!$DisplayName) { $DisplayName = $ServerName } 
+ 
+        $ServerName = [System.Security.SecurityElement]::Escape($ServerName) 
+        $DisplayName = [System.Security.SecurityElement]::Escape($DisplayName) 
+ 
+        @" 
+<properties> 
+    <name>$ServerName</name> 
+    <displayName>$DisplayName</displayName> 
+</properties> 
+"@         
+ 
+    } 
+ 
+    #if ($ResourceGroupName) { $parameters.ResourceGroupName = $ResourceGroupName } 
+ 
+    $azureRmVm = Get-AzureRmVmEndpoint $ResourceGroupName 
+
+    if (!$Path) { $Path = "$home\Desktop\AzureRDG\Azure-$($labPrefix)-VMs.rdg" }  
+ 
+    if (!(Test-Path -Path $Path)) { New-Item -Path $Path -ItemType File -Force } 
+ 
+    $Path = Convert-path -Path $Path 
+ 
+    $rdgXml = New-RdgXml -FileElementName $ResourceGroupName 
+    $rootFileNode = $rdgXml.RDCMan.file 
+ 
+        $groupXmlElement = $rdgXml.CreateElement('group') 
+ 
+        $groupXmlElement.InnerXml = Get-RdgGroupInnerXml -GroupElementName $ResourceGroupName 
+        $null = $rootFileNode.AppendChild($groupXmlElement) 
+ 
+        $vmObjects =  $azureRmVm | 
+        Where-Object ResourceGroup -EQ $ResourceGroupName 
+ 
+        foreach ($vmObject in $vmObjects) 
+        { 
+            $serverXmlElement = $rdgXml.CreateElement('server') 
+            $null = $groupXmlElement.AppendChild($serverXmlElement) 
+            $serverXmlElement.InnerXml = Get-ServerElementInnerXml -ServerName $vmObject.DNSAddress -DisplayName $vmObject.ComputerName 
+        } 
+ 
+    $rdgXml.Save($Path) | Out-Null
+
+        if (-not(test-path "C:\Program Files\Microsoft\Remote Desktop Connection Manager\RDCMan.exe") -and (-not(test-path "C:\Program Files (x86)\Microsoft\Remote Desktop Connection Manager\RDCMan.exe"))) {
+            Import-Module BitsTransfer
+            Start-BitsTransfer -Source "https://download.microsoft.com/download/A/F/0/AF0071F3-B198-4A35-AA90-C68D103BDCCF/rdcman.msi" -Destination "$($home)\Desktop\AzureRDG\Remote Desktop Manager.msi"
+            } 
+} 
 
 ############################################ VM NAME, IP, Size, and SKU, are defined below. Add VMs as necessary ######################################
-############################################ Only chnage the last octect, so to the right of last decimal #############################################
+################################################################ Only chnage the last octect, #########################################################
+###################### VM NAMES ARE BEST UNIQUE ACCROSS AZURE REGION AS WOULD ALLOW YOU TO USE DNS FOR RDP INSTEAD PUBLIC IP ##########################
+## Host names will need to contain role, so that script logic can apply function specific additions. E.g. MFA server will only be provisioned with MFAServer.exe package if "mfa" is in hostname. Same for RDS, etc. 
 
-#Create DC-01 VM - # Best kept unique if poss, as will allow to use for RDP access, instead of public IP 
+# DC-01 VM
 #===========================
 New-AzureLabWindowsServerVM `
     -VMName $DCName `
@@ -865,25 +1114,10 @@ New-AzureLabWindowsServerVM `
     -SKU "2016-datacenter-smalldisk" `
     -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString()
 
-#Create ADFS-01 VM
+# ADFS-01 VM
 #=======================
 New-AzureLabWindowsServerVM `
     -VMName "ADFS-01" `
-    -Location $Location `
-    -ResourceGroupName $ResourceGroupName `
-    -VNETId $VNETSubID `
-    -VNETSGId $INTVNETSG.Id `
-    -VMSize "Standard_A1" `
-    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.51") `
-    -LocalAdmin $Credentials `
-    -SKU "2016-datacenter-smalldisk" `
-    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
-    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
-
-#Create WAP-01 VM
-#=================
-New-AzureLabWindowsServerVM `
-    -VMName "WAP-01" `
     -Location $Location `
     -ResourceGroupName $ResourceGroupName `
     -VNETId $VNETSubID `
@@ -894,8 +1128,74 @@ New-AzureLabWindowsServerVM `
     -SKU "2016-datacenter-smalldisk" `
     -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
     -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# WAP-01 VM
+#=================
+New-AzureLabWindowsServerVM `
+    -VMName "WAP-01" `
+    -Location $Location `
+    -ResourceGroupName $ResourceGroupName `
+    -VNETId $VNETSubID `
+    -VNETSGId $INTVNETSG.Id `
+    -VMSize "Standard_A1" `
+    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.54") `
+    -LocalAdmin $Credentials `
+    -SKU "2016-datacenter-smalldisk" `
+    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 	
-#Create MFA-01 VM
+# SharePoint-01 VM (2013)
+#=======================
+New-AzureLabWindowsServerVM `
+    -VMName "SP13-01" `
+    -Location $Location `
+    -ResourceGroupName $ResourceGroupName `
+    -VNETId $VNETSubID `
+    -VNETSGId $INTVNETSG.Id `
+   -VMSize "Standard_D2_v3" `
+   -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.56") `
+    -LocalAdmin $Credentials `
+    -Publisher "MicrosoftSharePoint" `
+    -Offer "MicrosoftSharePointServer" `
+    -SKU "2013" `
+   -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# SQL-01 VM (2016)
+#=======================
+New-AzureLabWindowsServerVM `
+    -VMName "SQL16-01" `
+    -Location $Location `
+    -ResourceGroupName $ResourceGroupName `
+    -VNETId $VNETSubID `
+    -VNETSGId $INTVNETSG.Id `
+   -VMSize "Standard_D2_v3" `
+   -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.58") `
+    -LocalAdmin $Credentials `
+    -Publisher "MicrosoftSQLServer" `
+    -Offer "SQL2016SP2-WS2016" `
+    -SKU "Standard" `
+   -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# SharePoint-01 VM (2016)
+#=======================
+#New-AzureLabWindowsServerVM `
+#    -VMName "SP16-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#   -VNETSGId $INTVNETSG.Id `
+#   -VMSize "Standard_D2_v3" `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.60") `
+#    -LocalAdmin $Credentials `
+#    -Publisher "MicrosoftSharePoint" `
+#    -Offer "MicrosoftSharePointServer" `
+#    -SKU "2016" `
+#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# MFA-01 VM
 #=================
 #New-AzureLabWindowsServerVM `
 #    -VMName "MFA-01" `
@@ -904,60 +1204,16 @@ New-AzureLabWindowsServerVM `
 #    -VNETId $VNETSubID `
 #    -VNETSGId $INTVNETSG.Id `
 #    -VMSize "Standard_A1" `
-#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.53") `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.62") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2012-r2-datacenter-smalldisk" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 	
-#Create MFA-02 VM
+# MFA-02 VM
 #=================
 #New-AzureLabWindowsServerVM `
 #    -VMName "MFA-02" `
-#    -Location $Location `
-#    -ResourceGroupName $ResourceGroupName `
-#    -VNETId $VNETSubID `
-#    -VNETSGId $INTVNETSG.Id `
-#    -VMSize "Standard_A1" `
-#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.54") `
-#    -LocalAdmin $Credentials `
-#    -SKU "2012-r2-datacenter-smalldisk" `
-#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
-#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds 
-
-#Create APP-01 VM
-#==================
-#New-AzureLabWindowsServerVM `
-#    -VMName "APP-01" `
-#    -Location $Location `
-#    -ResourceGroupName $ResourceGroupName `
-#    -VNETId $VNETSubID `
-#    -VNETSGId $INTVNETSG.Id `
-#    -VMSize "Standard_A1" `
-#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.60") `
-#    -LocalAdmin $Credentials `
-#    -SKU "2012-r2-datacenter-smalldisk" `
-#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
-#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
-	
-#Create SUSE VM
-#==================
-#New-AzureLabWindowsServerVM `
-#    -VMName "SUSE-01" `
-#    -Location $Location `
-#    -ResourceGroupName $ResourceGroupName `
-#    -VNETId $VNETSubID `
-#    -VNETSGId $INTVNETSG.Id `
-#    -VMSize "Standard_A1" `
-#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.61") `
-#    -LocalAdmin $Credentials `
-#    -SKU "11-SP4" `
-#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString()
-
-#Create RDS-01 VM
-#==================
-#New-AzureLabWindowsServerVM `
-#    -VMName "RDS-01" `
 #    -Location $Location `
 #    -ResourceGroupName $ResourceGroupName `
 #    -VNETId $VNETSubID `
@@ -967,27 +1223,12 @@ New-AzureLabWindowsServerVM `
 #    -LocalAdmin $Credentials `
 #    -SKU "2012-r2-datacenter-smalldisk" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
-#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
-	
-#Create RDS-02 VM
-#==================
-#New-AzureLabWindowsServerVM `
-#    -VMName "RDS-02" `
-#    -Location $Location `
-#    -ResourceGroupName $ResourceGroupName `
-#    -VNETId $VNETSubID `
-#    -VNETSGId $INTVNETSG.Id `
-#    -VMSize "Standard_A1" `
-#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.65") `
-#    -LocalAdmin $Credentials `
-#    -SKU "2012-r2-datacenter-smalldisk" `
-#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
-#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds 
 
-#Create NDES-01 VM
+# APP-01 VM
 #==================
 #New-AzureLabWindowsServerVM `
-#    -VMName "NDES-01" `
+#    -VMName "APP-01" `
 #    -Location $Location `
 #    -ResourceGroupName $ResourceGroupName `
 #    -VNETId $VNETSubID `
@@ -999,7 +1240,66 @@ New-AzureLabWindowsServerVM `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 	
-#Create PINGFed-01 VM
+# SUSE VM
+#==================
+#New-AzureLabWindowsServerVM `
+#    -VMName "SUSE-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_A1" `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.68") `
+#    -LocalAdmin $Credentials `
+#    -SKU "11-SP4" `
+#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString()
+
+# RDS-01 VM
+#==================
+#New-AzureLabWindowsServerVM `
+#    -VMName "RDS-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_A1" `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.70") `
+#    -LocalAdmin $Credentials `
+#    -SKU "2012-r2-datacenter-smalldisk" `
+#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+	
+# RDS-02 VM
+#==================
+#New-AzureLabWindowsServerVM `
+#    -VMName "RDS-02" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_A1" `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.72") `
+#    -LocalAdmin $Credentials `
+#    -SKU "2012-r2-datacenter-smalldisk" `
+#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# NDES-01 VM
+#==================
+#New-AzureLabWindowsServerVM `
+#    -VMName "NDES-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_A1" `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.74") `
+#    -LocalAdmin $Credentials `
+#    -SKU "2012-r2-datacenter-smalldisk" `
+#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+	
+# PINGFed-01 VM
 #==================
 #New-AzureLabWindowsServerVM `
 #    -VMName "PINGFed-01" `
@@ -1008,13 +1308,13 @@ New-AzureLabWindowsServerVM `
 #    -VNETId $VNETSubID `
 #    -VNETSGId $INTVNETSG.Id `
 #    -VMSize "Standard_A1" `
-#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.67") `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.76") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2012-r2-datacenter-smalldisk" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
-#Create TMG VM
+# TMG VM
 #==================
 #New-AzureLabWindowsServerVM `
 #    -VMName "TMG-01" `
@@ -1023,13 +1323,13 @@ New-AzureLabWindowsServerVM `
 #    -VNETId $VNETSubID `
 #    -VNETSGId $INTVNETSG.Id `
 #    -VMSize "Standard_A1" `
-#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.68") `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.78") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2008-R2-SP1-smalldisk" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
-#Create 2012 VM
+# 2012 VM
 #==================
 #New-AzureLabWindowsServerVM `
 #    -VMName "ADFS-2012" `
@@ -1038,28 +1338,82 @@ New-AzureLabWindowsServerVM `
 #    -VNETId $VNETSubID `
 #    -VNETSGId $INTVNETSG.Id `
 #    -VMSize "Standard_A1" `
-#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.69") `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.80") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2012-datacenter-smalldisk" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
-#Create EXCH16-01 VM
-#=================
-New-AzureLabWindowsServerVM `
-    -VMName "EXCH16-01" `
-    -Location $Location `
-    -ResourceGroupName $ResourceGroupName `
-    -VNETId $VNETSubID `
-    -VNETSGId $INTVNETSG.Id `
-    -VMSize "Standard_D3_v2" `
-    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.71") `
-    -LocalAdmin $Credentials `
-    -SKU "2012-r2-datacenter-smalldisk" `
-    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
-    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+# 2012 VM
+#==================
+#New-AzureLabWindowsServerVM `
+#    -VMName "ADFS-PROXY" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_A1" `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.82") `
+#    -LocalAdmin $Credentials `
+#    -SKU "2012-datacenter-smalldisk" `
+#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# CRM-01 VM
+#==================
+#New-AzureLabWindowsServerVM `
+#    -VMName "CRM-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_A1" `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.84") `
+#    -LocalAdmin $Credentials `
+#    -SKU "2012-r2-datacenter-smalldisk" `
+#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# 2008r2-01 VM
+#==================
+#New-AzureLabWindowsServerVM `
+#    -VMName "2008r2-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_A1" `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.86") `
+#    -LocalAdmin $Credentials `
+#    -SKU "2008-R2-SP1-smalldisk" `
+#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# MIM-01 VM
+#==================
+#New-AzureLabWindowsServerVM `
+#    -VMName "MIM-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_D2_v3" `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.88") `
+#    -LocalAdmin $Credentials `
+#    -SKU "2012-r2-datacenter" `
+#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# Call RDCMan function
+Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
+Write-Host " RDP to VMs " -ForegroundColor Cyan -NoNewline
+Write-Host " - Generating VM collection for Remote Desktop Manager...." -NoNewline
+New-AzureRmVmRdg $ResourceGroupName -WA 0
 
 # Job done, closing out...
-Write-Host "`nJob done, press any key to exit..."
-#$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+$wshell = New-Object -ComObject Wscript.Shell
+$wshell.Popup(" Go ahead and install RDC Manager and import the pre-generated Azure-$($labPrefix)-VMs.rdg file",0," Job complete...",0x0) | Out-Null
+invoke-item "$home\Desktop\AzureRDG\"
+Write-Host "Done`n" -ForegroundColor Green
+
 exit
