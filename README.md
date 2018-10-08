@@ -10,4 +10,4 @@ Smart provisioning of an entire lab comprising of a DC, ADFS, WAP, MFA, RDS, MIM
 Script will also check for prescence of Remote Desktop Manager, and download if necessary, plus auto generate an 
 RDP collection file for all VMs in enviroment. Simples!
 
-![Cloud-Identity-Lab](DocImages/5.png)
+![Cloud-Identity-Lab](DocImages/6.png)
