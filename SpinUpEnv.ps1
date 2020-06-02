@@ -1,12 +1,12 @@
 ﻿# Globals  
 #########################################################################################################
 
-$ResourceGroupOwner = "Rainier"  # Name of resource group owner - Must be unique within a subscription or will prompt to update an exisiting Resource Group
+$ResourceGroupOwner = "Rodney"  # Name of resource group owner - Must be unique within a subscription or will prompt to update an exisiting Resource Group
 $labPrefix = "Wacketywack"  # Must be unique
 $DCName = "DC-01"   
 $ADForestName = "wacketywack.local"
-$VNetIPBlock = "192.168.0.0/24" # Try and avoid overlapping between VNets in different RGs within a subscription, by occupying diffrent 3rd octet if poss
-$LANSubnetIPBlock = "192.168.0.0/25" # Provide 108 hosts, leaving some for GW SNet
+$VNetIPBlock = "192.168.1.0/24" # Try and avoid overlapping between VNets in different RGs within a subscription, by occupying diffrent 3rd octet if poss
+$LANSubnetIPBlock = "192.168.1.0/25" # Provide 108 hosts, leaving some for GW SNet
 
 ## - Some resources such as automation accounts are defined by name and can only exist once, Azure wide. Therefore Lab prefix must be different for every new enviroment being spun-up.
 ## - Script assumes that only one VNET exists for the enviroment, per RG
@@ -129,6 +129,7 @@ Function New-AzureLabVM {
         [Parameter(Mandatory=$false)][string]$PublisherName,
         [Parameter(Mandatory=$false)][string]$Offer,
         [Parameter(Mandatory=$true)][string]$SKU,
+        [Parameter(Mandatory=$true)][string]$Version,
         [Parameter(Mandatory=$true)][string]$StorageBlobURI,
         [switch]$JoinDomain,
         [string]$DomainName,
@@ -199,9 +200,9 @@ Function New-AzureLabVM {
             $VM = New-AzureRmVMConfig -VMName $VMName -VMSize $VMSize -WA 0
             $VM = Set-AzureRmVMOperatingSystem -VM $VM -Windows -ComputerName $VMName -Credential $LocalAdmin -ProvisionVMAgent -EnableAutoUpdate -WinRMHttp -WA 0         
             if (([string]::IsNullOrEmpty($PublisherName)) -or ([string]::IsNullOrEmpty($Offer))) {
-                    $VM = Set-AzureRmVMSourceImage -VM $VM -PublisherName MicrosoftWindowsServer -Offer WindowsServer -Skus $SKU -Version "latest" -WA 0
+                    $VM = Set-AzureRmVMSourceImage -VM $VM -PublisherName MicrosoftWindowsServer -Offer WindowsServer -Skus $SKU -Version $Version -WA 0
             } else {
-                    $VM = Set-AzureRmVMSourceImage -VM $VM -PublisherName $PublisherName -Offer $Offer -Skus $SKU -Version "latest" -WA 0
+                    $VM = Set-AzureRmVMSourceImage -VM $VM -PublisherName $PublisherName -Offer $Offer -Skus $SKU -Version $Version -WA 0
             }
             $VM = Add-AzureRmVMNetworkInterface -VM $VM -Id $NIC.Id -WA 0
             $VM = Set-AzureRmVMOSDisk -VM $VM -Name "$($VMName)sys" -vhd $OSDISKURI -CreateOption fromImage -WA 0
@@ -1301,6 +1302,7 @@ New-AzureLabVM `
     -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.50") `
     -LocalAdmin $ForestCreds `
     -SKU "2016-datacenter-smalldisk" `
+    -Version "latest" `
     -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString()
 
 # ADFS-01 VM
@@ -1315,6 +1317,7 @@ New-AzureLabVM `
     -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.52") `
     -LocalAdmin $Credentials `
     -SKU "2016-datacenter-smalldisk" `
+    -Version "latest" `
     -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
     -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
@@ -1330,6 +1333,7 @@ New-AzureLabVM `
     -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.54") `
     -LocalAdmin $Credentials `
     -SKU "2016-datacenter-smalldisk" `
+    -Version "latest" `
     -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
     -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 	
@@ -1347,6 +1351,7 @@ New-AzureLabVM `
 #    -Publisher "MicrosoftSharePoint" `
 #    -Offer "MicrosoftSharePointServer" `
 #    -SKU "2013" `
+#    -Version "latest" `
 #   -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
@@ -1364,6 +1369,7 @@ New-AzureLabVM `
 #    -Publisher "MicrosoftSQLServer" `
 #    -Offer "SQL2016SP2-WS2016" `
 #    -SKU "Standard" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
@@ -1381,6 +1387,7 @@ New-AzureLabVM `
 #    -Publisher "MicrosoftSharePoint" `
 #    -Offer "MicrosoftSharePointServer" `
 #    -SKU "2016" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
@@ -1396,6 +1403,7 @@ New-AzureLabVM `
 #    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.62") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2012-r2-datacenter-smalldisk" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 	
@@ -1411,6 +1419,7 @@ New-AzureLabVM `
 #    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.64") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2012-r2-datacenter" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds 
 
@@ -1426,6 +1435,7 @@ New-AzureLabVM `
 #    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.66") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2012-r2-datacenter-smalldisk" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 	
@@ -1441,6 +1451,7 @@ New-AzureLabVM `
 #    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.68") `
 #    -LocalAdmin $Credentials `
 #    -SKU "11-SP4" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString()
 
 # RDS-01 VM
@@ -1455,6 +1466,7 @@ New-AzureLabVM `
 #    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.70") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2019-datacenter-smalldisk" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 	
@@ -1470,6 +1482,7 @@ New-AzureLabVM `
 #    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.72") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2012-r2-datacenter-smalldisk" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
@@ -1485,6 +1498,7 @@ New-AzureLabVM `
 #    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.74") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2012-r2-datacenter-smalldisk" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
@@ -1500,6 +1514,7 @@ New-AzureLabVM `
 #    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.75") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2012-r2-datacenter-smalldisk" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
@@ -1515,6 +1530,7 @@ New-AzureLabVM `
 #    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.76") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2012-r2-datacenter-smalldisk" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
@@ -1530,6 +1546,7 @@ New-AzureLabVM `
 #    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.78") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2008-R2-SP1-smalldisk" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
@@ -1545,6 +1562,7 @@ New-AzureLabVM `
 #    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.80") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2012-datacenter-smalldisk" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
@@ -1560,6 +1578,7 @@ New-AzureLabVM `
 #    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.82") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2012-datacenter-smalldisk" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
@@ -1575,6 +1594,7 @@ New-AzureLabVM `
 #    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.84") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2012-r2-datacenter-smalldisk" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
@@ -1590,6 +1610,7 @@ New-AzureLabVM `
 #    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.86") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2008-R2-SP1-smalldisk" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
@@ -1605,6 +1626,7 @@ New-AzureLabVM `
 #    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.88") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2012-r2-datacenter" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
@@ -1620,6 +1642,7 @@ New-AzureLabVM `
 #    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.91") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2012-r2-datacenter-smalldisk" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
@@ -1637,6 +1660,7 @@ New-AzureLabVM `
     -Publisher "MicrosoftVisualStudio" `
     -Offer "windows" `
     -SKU "Windows-10-N-x64" `
+    -Version "latest" `
     -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 
 # Windows 8.1
@@ -1653,6 +1677,7 @@ New-AzureLabVM `
 #    -Publisher "MicrosoftVisualStudio" `
 #    -Offer "windows" `
 #    -SKU "Win81-Ent-N-x64" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 
 # Windows 7
@@ -1669,6 +1694,7 @@ New-AzureLabVM `
 #    -Publisher "MicrosoftVisualStudio" `
 #    -Offer "windows" `
 #    -SKU "Win7-SP1-Ent-N-x64" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 
 # WAC-01 VM
@@ -1683,6 +1709,7 @@ New-AzureLabVM `
 #    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.99") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2019-datacenter-smalldisk" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #   -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
@@ -1698,6 +1725,7 @@ New-AzureLabVM `
 #    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.101") `
 #    -LocalAdmin $Credentials `
 #    -SKU "2012-R2-Datacenter" `
+#    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
