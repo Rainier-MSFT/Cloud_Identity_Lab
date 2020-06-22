@@ -1,4 +1,4 @@
-﻿# Globals  
+# Globals  
 #########################################################################################################
 
 $ResourceGroupOwner = "Rodney"  # Name of resource group owner - Must be unique within a subscription or will prompt to update an exisiting Resource Group
@@ -12,7 +12,8 @@ $LANSubnetIPBlock = "192.168.0.0/25" # Provide 108 hosts, leaving some for GW SN
 ## - Script assumes that only one VNET exists for the enviroment, per RG
 ## - When choosing region be aware that UK South as a new region is fairly new, so runs somewhat leaner that other regions for now. Consider selecting Western EU instead
 
-# VM type to be deployed are at end of script. Just uncomment as needed. 
+# VM type to be deployed are at end of script. Default is to deploy DC and IIS application host. Just uncomment others as required.
+# Script will skip VMs that are in scope but already exist.
 
 #########################################################################################################
 
