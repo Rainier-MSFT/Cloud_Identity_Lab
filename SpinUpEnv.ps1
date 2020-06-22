@@ -1650,20 +1650,20 @@ New-AzureLabVM `
 
 # Windows 10 - AADJ (Not joined to local domain)
 #=======================
-New-AzureLabVM `
-    -VMName "W10-02" `
-    -Location $Location `
-    -ResourceGroupName $ResourceGroupName `
-    -VNETId $VNETSubID `
-    -VNETSGId $INTVNETSG.Id `
-    -VMSize "Standard_B2ms" `
-    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.93") `
-    -LocalAdmin $Credentials `
-    -Publisher "MicrosoftVisualStudio" `
-    -Offer "windows" `
-    -SKU "Windows-10-N-x64" `
-    -Version "latest" `
-    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+#New-AzureLabVM `
+#    -VMName "W10-02" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_B2ms" `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.93") `
+#    -LocalAdmin $Credentials `
+#    -Publisher "MicrosoftVisualStudio" `
+#    -Offer "windows" `
+#    -SKU "Windows-10-N-x64" `
+#    -Version "latest" `
+#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 
 # Windows 8.1
 #=======================
