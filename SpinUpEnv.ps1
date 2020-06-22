@@ -2,15 +2,17 @@
 #########################################################################################################
 
 $ResourceGroupOwner = "Rodney"  # Name of resource group owner - Must be unique within a subscription or will prompt to update an exisiting Resource Group
-$labPrefix = "Wacketywack"  # Must be unique
+$labPrefix = "Teredo"  # Must be unique
 $DCName = "DC-01"   
-$ADForestName = "wacketywack.local"
-$VNetIPBlock = "192.168.1.0/24" # Try and avoid overlapping between VNets in different RGs within a subscription, by occupying diffrent 3rd octet if poss
-$LANSubnetIPBlock = "192.168.1.0/25" # Provide 108 hosts, leaving some for GW SNet
+$ADForestName = "teredo.com"
+$VNetIPBlock = "192.168.0.0/24" # Try and avoid overlapping between VNets in different RGs within a subscription, by occupying diffrent 3rd octet if poss
+$LANSubnetIPBlock = "192.168.0.0/25" # Provide 108 hosts, leaving some for GW SNet if required
 
 ## - Some resources such as automation accounts are defined by name and can only exist once, Azure wide. Therefore Lab prefix must be different for every new enviroment being spun-up.
 ## - Script assumes that only one VNET exists for the enviroment, per RG
 ## - When choosing region be aware that UK South as a new region is fairly new, so runs somewhat leaner that other regions for now. Consider selecting Western EU instead
+
+# VM type to be deployed are at end of script. Just uncomment as needed. 
 
 #########################################################################################################
 
@@ -1307,35 +1309,35 @@ New-AzureLabVM `
 
 # ADFS-01 VM
 #=======================
-New-AzureLabVM `
-    -VMName "ADFS-01" `
-    -Location $Location `
-    -ResourceGroupName $ResourceGroupName `
-    -VNETId $VNETSubID `
-    -VNETSGId $INTVNETSG.Id `
-    -VMSize "Standard_A1" `
-    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.52") `
-    -LocalAdmin $Credentials `
-    -SKU "2016-datacenter-smalldisk" `
-    -Version "latest" `
-    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
-    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+#New-AzureLabVM `
+#    -VMName "ADFS-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_A1" `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.52") `
+#    -LocalAdmin $Credentials `
+#    -SKU "2016-datacenter-smalldisk" `
+#    -Version "latest" `
+#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
 # WAP-01 VM
 #=================
-New-AzureLabVM `
-    -VMName "WAP-01" `
-    -Location $Location `
-    -ResourceGroupName $ResourceGroupName `
-    -VNETId $VNETSubID `
-    -VNETSGId $INTVNETSG.Id `
-    -VMSize "Standard_A1" `
-    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.54") `
-    -LocalAdmin $Credentials `
-    -SKU "2016-datacenter-smalldisk" `
-    -Version "latest" `
-    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
-    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+#New-AzureLabVM `
+#    -VMName "WAP-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_A1" `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.54") `
+#    -LocalAdmin $Credentials `
+#    -SKU "2016-datacenter-smalldisk" `
+#    -Version "latest" `
+#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 	
 # SharePoint-01 VM (2013)
 #=======================
