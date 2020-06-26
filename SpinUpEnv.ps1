@@ -1846,7 +1846,7 @@ Write-Host "Done`n" -ForegroundColor Green
 
 # Job done, closing out...
 $wshell = New-Object -ComObject Wscript.Shell
-$wshell.Popup(" Go ahead and install RDC Manager and import the pre-generated Azure-$($labPrefix)-VMs.rdg file",0," Job complete...",0x0) | Out-Null
+$wshell.Popup(" Go ahead and install MRemoteNG and import the pre-generated Azure-$($labPrefix)-VMs.rdg file",0," Job complete...",0x0) | Out-Null
 invoke-item "$home\Desktop\AzureRDG\"
 
 exit
