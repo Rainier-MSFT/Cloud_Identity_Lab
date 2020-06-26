@@ -2,7 +2,7 @@
 #########################################################################################################
 
 $ResourceGroupOwner = "Rodney"  # Name of resource group owner - Must be unique within a subscription or will prompt to update an exisiting Resource Group
-$labPrefix = "Contoso"  # Must be unique & and alphanumeric only, to support Storage account naming convention
+$labPrefix = "contoso"  # Must be unique & and alphanumeric only, to support Storage account naming convention
 $DCName = "DC-01"   
 $ADForestName = "contoso.com"
 $VNetIPBlock = "192.168.0.0/24" # Try and avoid overlapping between VNets in different RGs within a subscription, by occupying diffrent 3rd octet if poss
@@ -1291,7 +1291,7 @@ function New-AzureRmVmRdg
             } 
 
             } 
-} 
+
 
 ############################################ VM NAME, IP, Size, and SKU, are defined below. Add VMs as necessary ######################################
 ################################################################ Only chnage the last octect, #########################################################
@@ -1846,7 +1846,7 @@ Write-Host "Done`n" -ForegroundColor Green
 
 # Job done, closing out...
 $wshell = New-Object -ComObject Wscript.Shell
-$wshell.Popup(" Go ahead and install MRemoteNG and import the pre-generated Azure-$($labPrefix)-VMs.rdg file",0," Job complete...",0x0) | Out-Null
+$wshell.Popup(" Go ahead and install mRemoteNG and import the pre-generated Azure-$($labPrefix)-VMs.rdg VM collection file",0," Job complete...",0x0) | Out-Null
 invoke-item "$home\Desktop\AzureRDG\"
 
 exit
