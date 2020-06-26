@@ -1,10 +1,10 @@
 # Globals  
 #########################################################################################################
 
-$ResourceGroupOwner = "Rainier"  # Name of resource group owner - Must be unique within a subscription or will prompt to update an exisiting Resource Group
-$labPrefix = "wacketywack"  # Must be unique & and alphanumeric only, to support Storage account naming convention
+$ResourceGroupOwner = "Rodney"  # Name of resource group owner - Must be unique within a subscription or will prompt to update an exisiting Resource Group
+$labPrefix = "Contoso"  # Must be unique & and alphanumeric only, to support Storage account naming convention
 $DCName = "DC-01"   
-$ADForestName = "wacketywack.local"
+$ADForestName = "contoso.com"
 $VNetIPBlock = "192.168.0.0/24" # Try and avoid overlapping between VNets in different RGs within a subscription, by occupying diffrent 3rd octet if poss
 $LANSubnetIPBlock = "192.168.0.0/25" # Provide 108 hosts, leaving some for GW SNet
 
