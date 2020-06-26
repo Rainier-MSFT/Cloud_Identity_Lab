@@ -1,19 +1,16 @@
 # Globals  
 #########################################################################################################
 
-$ResourceGroupOwner = "Rodney"  # Name of resource group owner - Must be unique within a subscription or will prompt to update an exisiting Resource Group
-$labPrefix = "Teredo"  # Must be unique
+$ResourceGroupOwner = "Rainier"  # Name of resource group owner - Must be unique within a subscription or will prompt to update an exisiting Resource Group
+$labPrefix = "wacketywack"  # Must be unique & and alphanumeric only, to support Storage account naming convention
 $DCName = "DC-01"   
-$ADForestName = "teredo.com"
+$ADForestName = "wacketywack.local"
 $VNetIPBlock = "192.168.0.0/24" # Try and avoid overlapping between VNets in different RGs within a subscription, by occupying diffrent 3rd octet if poss
-$LANSubnetIPBlock = "192.168.0.0/25" # Provide 108 hosts, leaving some for GW SNet if required for Azure AD Domain Services
+$LANSubnetIPBlock = "192.168.0.0/25" # Provide 108 hosts, leaving some for GW SNet
 
 ## - Some resources such as automation accounts are defined by name and can only exist once, Azure wide. Therefore Lab prefix must be different for every new enviroment being spun-up.
 ## - Script assumes that only one VNET exists for the enviroment, per RG
 ## - When choosing region be aware that UK South as a new region is fairly new, so runs somewhat leaner that other regions for now. Consider selecting Western EU instead
-
-# VM type to be deployed are at end of script. Default is to deploy DC and IIS application host. Just uncomment others as required.
-# Script will skip VMs that are in scope but already exist.
 
 #########################################################################################################
 
@@ -246,7 +243,7 @@ Function New-AzureLabVM {
                         Write-Host "Already exists. Moving on" -ForegroundColor DarkGray
                     }   else {
                         "`n"
-                        New-AzureStorageContainer -Name "scripts2" -Context $StorageContext -WA 0
+                        New-AzureStorageContainer -Name "scripts" -Context $StorageContext -WA 0
                     }
                 
                 if ($VMName -eq $DCName) {
@@ -1115,7 +1112,7 @@ else {
     $STORAGE = Get-AzureRmStorageAccount -ResourceGroupName $ResourceGroupName | ? {$_.StorageAccountName -eq "$($labPrefix)storage"}
 }
 
-# Download RDC Manager to folder on desktop and generate VM file 
+# Generate mRemoteNG download link and VM file 
 #===============================================================
 function Get-AzureRmVmEndpoint 
 { 
@@ -1282,16 +1279,24 @@ function New-AzureRmVmRdg
  
     $rdgXml.Save($Path) | Out-Null
 
-        if (-not(test-path "C:\Program Files\Microsoft\Remote Desktop Connection Manager\RDCMan.exe") -and (-not(test-path "C:\Program Files (x86)\Microsoft\Remote Desktop Connection Manager\RDCMan.exe"))) {
-            Import-Module BitsTransfer
-            Start-BitsTransfer -Source "https://download.microsoft.com/download/A/F/0/AF0071F3-B198-4A35-AA90-C68D103BDCCF/rdcman.msi" -Destination "$($home)\Desktop\AzureRDG\Remote Desktop Manager.msi"
+        if (-not(test-path "C:\Program Files (x86)\mRemoteNG\mRemoteNG.ex")) {          
+            $Shell = New-Object -ComObject ("WScript.Shell")
+            $ShortCut = $Shell.CreateShortcut("C:\Users\Public\Desktop\mRemoteNG.lnk")
+            $ShortCut.TargetPath = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+            $ShortCut.Arguments = "https://mremoteng.org/download"
+            $ShortCut.WorkingDirectory = "C:\Program Files (x86)\Microsoft\Edge\Application"
+            $ShortCut.WindowStyle = 1
+            $ShortCut.IconLocation = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe,0"
+            $ShortCut.Save()
+            } 
+
             } 
 } 
 
 ############################################ VM NAME, IP, Size, and SKU, are defined below. Add VMs as necessary ######################################
 ################################################################ Only chnage the last octect, #########################################################
 ###################### VM NAMES ARE BEST UNIQUE ACCROSS AZURE REGION AS WOULD ALLOW YOU TO USE DNS FOR RDP INSTEAD PUBLIC IP ##########################
-## Host names will need to contain role, so that script logic can apply function specific additions. E.g. MFA server will only be provisioned with MFAServer.exe package if "mfa" is in hostname. Same for RDS, etc. 
+## Host name (VMName) should contain role, so that script logic can apply function specific additions. E.g. MFA server will only be provisioned with MFAServer.exe package if "mfa" is in hostname. Same for RDS, etc. 
 
 # DC-01 VM
 #===========================
@@ -1301,7 +1306,7 @@ New-AzureLabVM `
     -ResourceGroupName $ResourceGroupName `
     -VNETId $VNETSubID `
     -VNETSGId $INTVNETSG.Id `
-    -VMSize "Standard_A1" `
+    -VMSize "Standard_B2s" `
     -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.50") `
     -LocalAdmin $ForestCreds `
     -SKU "2016-datacenter-smalldisk" `
@@ -1310,53 +1315,53 @@ New-AzureLabVM `
 
 # ADFS-01 VM
 #=======================
-#New-AzureLabVM `
-#    -VMName "ADFS-01" `
-#    -Location $Location `
-#    -ResourceGroupName $ResourceGroupName `
-#    -VNETId $VNETSubID `
-#    -VNETSGId $INTVNETSG.Id `
-#    -VMSize "Standard_A1" `
-#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.52") `
-#    -LocalAdmin $Credentials `
-#    -SKU "2016-datacenter-smalldisk" `
-#    -Version "latest" `
-#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
-#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+New-AzureLabVM `
+    -VMName "ADFS-01" `
+    -Location $Location `
+    -ResourceGroupName $ResourceGroupName `
+    -VNETId $VNETSubID `
+    -VNETSGId $INTVNETSG.Id `
+    -VMSize "Standard_B2s" `
+    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.52") `
+    -LocalAdmin $Credentials `
+    -SKU "2019-datacenter-smalldisk" `
+    -Version "latest" `
+    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
 # WAP-01 VM
 #=================
-#New-AzureLabVM `
-#    -VMName "WAP-01" `
-#    -Location $Location `
-#    -ResourceGroupName $ResourceGroupName `
-#    -VNETId $VNETSubID `
-#    -VNETSGId $INTVNETSG.Id `
-#    -VMSize "Standard_A1" `
-#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.54") `
-#    -LocalAdmin $Credentials `
-#    -SKU "2016-datacenter-smalldisk" `
-#    -Version "latest" `
-#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
-#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+New-AzureLabVM `
+    -VMName "WAP-01" `
+    -Location $Location `
+    -ResourceGroupName $ResourceGroupName `
+    -VNETId $VNETSubID `
+    -VNETSGId $INTVNETSG.Id `
+    -VMSize "Standard_B2s" `
+    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.54") `
+    -LocalAdmin $Credentials `
+    -SKU "2019-datacenter-smalldisk" `
+    -Version "latest" `
+    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 	
-# SharePoint-01 VM (2013)
+# SP-01 VM ( Sharepoint 2013)
 #=======================
 #New-AzureLabVM `
-#    -VMName "SP13-01" `
-#    -Location $Location `
-#    -ResourceGroupName $ResourceGroupName `
-#    -VNETId $VNETSubID `
-#    -VNETSGId $INTVNETSG.Id `
+#   -VMName "SP-01" `
+#   -Location $Location `
+#   -ResourceGroupName $ResourceGroupName `
+#   -VNETId $VNETSubID `
+#   -VNETSGId $INTVNETSG.Id `
 #   -VMSize "Standard_D2_v3" `
 #   -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.56") `
-#    -LocalAdmin $Credentials `
-#    -Publisher "MicrosoftSharePoint" `
-#    -Offer "MicrosoftSharePointServer" `
-#    -SKU "2013" `
-#    -Version "latest" `
+#   -LocalAdmin $Credentials `
+#   -Publisher "MicrosoftSharePoint" `
+#   -Offer "MicrosoftSharePointServer" `
+#   -SKU "2013" `
+#   -Version "latest" `
 #   -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
-#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+#   -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
 # SQL-01 VM (2016)
 #=======================
@@ -1649,7 +1654,7 @@ New-AzureLabVM `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
-# Windows 10 - AADJ (Not joined to local domain)
+# Windows 10 - AADJ (Not joined to lcoal domain)
 #=======================
 #New-AzureLabVM `
 #    -VMName "W10-02" `
@@ -1714,12 +1719,12 @@ New-AzureLabVM `
 #    -SKU "2019-datacenter-smalldisk" `
 #    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
-#   -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
-# EXCH-01 VM
+# EXCH16-16 VM
 #==================
 #New-AzureLabVM `
-#    -VMName "EXCH-01" `
+#    -VMName "EXCH-16" `
 #    -Location $Location `
 #    -ResourceGroupName $ResourceGroupName `
 #    -VNETId $VNETSubID `
@@ -1731,6 +1736,106 @@ New-AzureLabVM `
 #    -Version "latest" `
 #    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
 #    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# AADCv2-01 VM
+#==================
+#New-AzureLabVM `
+#    -VMName "AADCv2-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_D3_v2" `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.103") `
+#    -LocalAdmin $Credentials `
+#    -SKU "2016-datacenter-smalldisk" `
+#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# EXCH-16 VM
+#==================
+#New-AzureLabVM `
+#    -VMName "EXCH-16" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_D3_v2" `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.105") `
+#    -LocalAdmin $Credentials `
+#    -SKU "2016-Datacenter" `
+#    -Version "latest" `
+#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# APP-TEST VM
+#==================
+#New-AzureLabVM `
+#    -VMName "APP-TEST" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_D3_v2" `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.109") `
+#    -LocalAdmin $Credentials `
+#    -SKU "2016-Datacenter" `
+#    -Version "latest" `
+#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# Windows 10 - 1709 domain joined
+#=======================
+#New-AzureLabVM `
+#    -VMName "W10-1709-dj" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_B2ms" `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.111") `
+#    -LocalAdmin $Credentials `
+#    -Publisher "MicrosoftVisualStudio" `
+#    -Offer "windows" `
+#    -SKU "Windows-10-N-x64" `
+#    -Version "2018.08.17" `
+#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString() `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# Windows 10 - 1709 Not domain joined
+#=======================
+#New-AzureLabVM `
+#    -VMName "W10-1709" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_B2ms" `
+#    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.113") `
+#    -LocalAdmin $Credentials `
+#    -Publisher "MicrosoftVisualStudio" `
+#    -Offer "windows" `
+#    -SKU "Windows-10-N-x64" `
+#    -Version "2018.08.17" `
+#    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString()
+
+# Windows 10 - Latest v. domain joined
+#=======================
+New-AzureLabVM `
+    -VMName "W10-01" `
+    -Location $Location `
+    -ResourceGroupName $ResourceGroupName `
+    -VNETId $VNETSubID `
+    -VNETSGId $INTVNETSG.Id `
+    -VMSize "Standard_B2ms" `
+    -PrivateIP $($LANSubnetIPBlock -replace '(.*)\.\d+$',"`$1.115") `
+    -LocalAdmin $Credentials `
+    -Publisher "MicrosoftVisualStudio" `
+    -Offer "windows" `
+    -SKU "Windows-10-N-x64" `
+    -Version "latest" `
+    -StorageBlobURI $STORAGE.PrimaryEndpoints.Blob.ToString()
+    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
 
 # Call RDCMan function
 Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
@@ -1745,4 +1850,3 @@ $wshell.Popup(" Go ahead and install RDC Manager and import the pre-generated Az
 invoke-item "$home\Desktop\AzureRDG\"
 
 exit
-
