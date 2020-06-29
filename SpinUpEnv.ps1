@@ -1092,7 +1092,7 @@ else {
 #=============================
 Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
 Write-Host " - Creating Shared Storage...." -NoNewline
-if (-not (Get-AzureRmResource -ODataQuery "`$filter=resourcetype eq 'Microsoft.Storage/storageAccounts' and resourcegroup eq '$ResourceGroupName' and name eq '$($labPrefix)storage'" -WA 0)) {
+if (-not (Get-AzureRmStorageAccountNameAvailability -Name '$($labPrefix)storage' -WA 0)) {
 	try {
         $STORAGE = New-AzureRmStorageAccount -WA 0 `
 		        -ResourceGroupName $ResourceGroupName `
@@ -1102,8 +1102,7 @@ if (-not (Get-AzureRmResource -ODataQuery "`$filter=resourcetype eq 'Microsoft.S
 	        Write-Host "Done" -ForegroundColor Green
 } 
 catch {
-    Write-Host "Oh no...Looks like a storage account named ""$($labPrefix)storage"" may already exists -  Exiting..." -ForegroundColor Red
-    Write-Host "Please use a different Oh no...Looks like a storage account named ""$($labPrefix)storage"" may already exists -  Exiting..." -ForegroundColor Red
+    Write-Host "A storage account named ""$($labPrefix)storage"" may already exists -  Exiting..." -ForegroundColor Red
     Break
     }	
 }
