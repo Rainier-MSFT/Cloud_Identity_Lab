@@ -1102,7 +1102,7 @@ if (-not (Get-AzureRmStorageAccountNameAvailability -Name '$($labPrefix)storage'
 	        Write-Host "Done" -ForegroundColor Green
 } 
 catch {
-    Write-Host "A storage account named ""$($labPrefix)storage"" may already exists -  Exiting..." -ForegroundColor Red
+    Write-Host "A storage account named ""$($labPrefix)storage"" may already exist -  Exiting..." -ForegroundColor Red
     Break
     }	
 }
