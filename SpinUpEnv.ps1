@@ -336,7 +336,7 @@ Restart-Computer -ComputerName . -Force
                     #================================
                     Write-Host "[CREATEVM]: " -ForegroundColor Yellow -NoNewline
                     Write-Host "$VMName" -ForegroundColor Cyan -NoNewline
-                    Write-Host " - Provisioning  roles and features...." -NoNewline
+                    Write-Host " - Provisioning roles and features. This might take a while...." -NoNewline
                     $RolesScript = 
 @'
 
