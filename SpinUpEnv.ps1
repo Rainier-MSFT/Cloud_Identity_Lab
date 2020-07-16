@@ -7,7 +7,6 @@ $DCName = "DC-01"
 $ADForestName = "contoso.com"
 $VNetIPBlock = "192.168.0.0/24" # Try and avoid overlapping between VNets in different RGs within a subscription, by occupying diffrent 3rd octet if poss
 $LANSubnetIPBlock = "192.168.0.0/25" # Provide 108 hosts, leaving some for GW SNet
-$LANSubnetIPBlock2 = "192.168.0.128/28"
 
 ## - As storage account name needs to be unique in Azure, script will use lab prefix and append random number if "$labprefix+"storage" name is already used. E.g. Contosostorage
 ## - Some resources such as automation accounts are defined by name and can only exist once, Azure wide. Therefore Lab prefix must be different for every new enviroment being spun-up.
