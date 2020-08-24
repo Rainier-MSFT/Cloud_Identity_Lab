@@ -975,7 +975,7 @@ else {
 		Write-Host "already exists. Moving on..." -ForegroundColor DarkGray
         $VNET = Get-AzVirtualNetwork -Name "$($labPrefix)-VNET" -ResourceGroupName $ResourceGroupName -WA 0
 }
-$VNETSubID = (Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $VNET -Name "$($labPrefix)-Internal").Id
+$VNETSubID = (Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $VNET -Name "Internal").Id
 
 # Generate mRemoteNG download link and VM file
 #===============================================================
