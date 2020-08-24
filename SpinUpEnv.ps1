@@ -210,7 +210,12 @@ Function New-AzureLabVM {
             if ($JoinDomain){
                 Write-Host "[CREATEVM]: " -ForegroundColor Yellow -NoNewline
                 Write-Host "$VMName" -ForegroundColor Cyan -NoNewline
-                Write-Host " - Joining to $($domainName) domain....`n" -NoNewline
+                Write-Host " - Joining "  -NoNewline
+                Write-Host "[" -NoNewline -ForegroundColor White
+                Write-Host "$($domainName)" -NoNewline -ForegroundColor Green
+                Write-Host "] " -ForegroundColor White -NoNewline
+                Write-Host "domain...." -NoNewline
+
                 Set-AzVMExtension -VMName $VMName -ResourceGroupName $ResourceGroupName -Name "JoinAD" -ExtensionType "JsonADDomainExtension" -Publisher "Microsoft.Compute" -TypeHandlerVersion "1.0" -Location $Location -Settings @{ "Name" = $domainName; "OUPath" = ""; "User" = "$($DomainAdmin.Username)@$domainName"; "Restart" = "true"; "Options" = 3} -ProtectedSettings @{"Password" = "$($DomainAdmin.GetNetworkCredential().Password)"} | out-null
             }
       
@@ -435,7 +440,7 @@ Restart-Computer -ComputerName . -Force
                     #============
                     Write-Host "Done" -Foregroundcolor Green
                     $RolesScript | Out-File $env:TEMP\WAP-Role.ps1 -Force
-                    Write-Host "[MAIN]: " -ForegroundColor Yellow -NoNewline
+                    Write-Host "[CREATEVM]: " -ForegroundColor Yellow -NoNewline
                     Write-Host "$VMName" -ForegroundColor Cyan -NoNewline
                     Write-Host " - Uploading script to container...." -NoNewline
                     Set-AzStorageBlobContent -Container "scripts" -File $env:TEMP\WAP-Role.ps1 -Blob "WAP-Role.ps1" -Context $StorageContext -force | out-null
@@ -738,7 +743,7 @@ Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
 Write-Host " - Resource group " -NoNewline
 Write-Host "[" -NoNewline
 Write-Host "$($ResourceGroupName)" -NoNewline -ForegroundColor Green
-Write-Host "] " -NoNewline
+Write-Host "].... " -NoNewline
 Get-AzResourceGroup -Name $ResourceGroupName -ev notPresent -ea 0 | Out-Null
 if ($notPresent) { 
         Write-Host "Not found. " -NoNewline
@@ -862,11 +867,11 @@ if(Get-AzStorageContainer -Context $StorageContext | ? {$_.name -eq "scripts"}) 
 #Create Automation Account to hold runbooks/dsc configs
 #======================================================
 Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
-Write-Host " - Creating Automation Account...." -NoNewline
+Write-Host " - Creating " -NoNewline
 Write-Host "[" -NoNewline -ForegroundColor White
-Write-Host "Internal" -NoNewline -ForegroundColor Green
-Write-Host "]" -ForegroundColor White -NoNewline
-Write-Host "...." -NoNewline
+Write-Host "$($labPrefix)-Automation" -NoNewline -ForegroundColor Green
+Write-Host "] " -ForegroundColor White -NoNewline
+Write-Host "account...." -NoNewline
 if(-not (Get-AzResource -ResourceGroupName $ResourceGroupName -ResourceType "Microsoft.Automation/automationAccounts" -Name "$($labPrefix)-Automation" -Tag @{ "Role"="CloudIDLab_AutomationAccount" } -EA SilentlyContinue)) {
     Try {    
         $AUTOACC = New-AzAutomationAccount -ResourceGroupName $ResourceGroupName -Name "$($labPrefix)-Automation" -Location $Location -Tag @{ "Role"="CloudIDLab_AutomationAccount" } -WA 0
@@ -875,11 +880,11 @@ if(-not (Get-AzResource -ResourceGroupName $ResourceGroupName -ResourceType "Mic
         $ErrorMessage = $_.Exception.Message
         $FailedItem = $_.Exception.ItemName
         Write-Host "Unable to create automation account" -ForegroundColor DarkGray
-        Break
+        Break  
         } 
 }
 else {
-    $AUTOACC = get-AzAutomationAccount -ResourceGroupName $ResourceGroupName -Name "$($labPrefix)-Automation" -WA 0
+    $AUTOACC = get-AzAutomationAccount -ResourceGroupName $ResourceGroupName -WA 0
     Write-Host "$($AUTOACC.AutomationAccountName) already exists. Moving on" -ForegroundColor DarkGray
 }
 
@@ -978,7 +983,7 @@ else {
 $VNETSubID = (Get-AzVirtualNetworkSubnetConfig -VirtualNetwork $VNET -Name "Internal").Id
 
 # Generate mRemoteNG download link and VM file
-#===============================================================
+#=============================================
 function Get-AzureVmEndpoint
 { 
     [CmdletBinding()] 
@@ -1164,8 +1169,420 @@ function New-AzureVmRdg
 ## Host name (VMName) should contain role, so that script logic can apply function specific additions. E.g. MFA server will only be provisioned with MFAServer.exe package if "mfa" is in hostname. Same for RDS, etc. 
 
 
+# DC-01 VM
+#===========================
+New-AzureLabVM `
+    -VMName $DCName `
+    -Location $Location `
+    -ResourceGroupName $ResourceGroupName `
+    -VNETId $VNETSubID `
+    -VNETSGId $INTVNETSG.Id `
+    -VMSize "Standard_B2s" `
+    -PrivateIP '192.168.0.50' `
+    -LocalAdmin $ForestCreds `
+    -SKU "2016-datacenter-smalldisk" `
+    -Version "latest" `
+    -StorageBlobURI $StorageContext.BlobEndPoint
+
+# ADFS-01 VM
+#=======================
+New-AzureLabVM `
+    -VMName "ADFS-01" `
+    -Location $Location `
+    -ResourceGroupName $ResourceGroupName `
+    -VNETId $VNETSubID `
+    -VNETSGId $INTVNETSG.Id `
+    -VMSize "Standard_B2s" `
+    -PrivateIP '192.168.0.52' `
+    -LocalAdmin $Credentials `
+    -SKU "2019-datacenter-smalldisk" `
+    -Version "latest" `
+    -StorageBlobURI $StorageContext.BlobEndPoint `
+    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# WAP-01 VM
+#=================
+New-AzureLabVM `
+    -VMName "WAP-01" `
+    -Location $Location `
+    -ResourceGroupName $ResourceGroupName `
+    -VNETId $VNETSubID `
+    -VNETSGId $INTVNETSG.Id `
+    -VMSize "Standard_B2s" `
+    -PrivateIP '192.168.0.54' `
+    -LocalAdmin $Credentials `
+    -SKU "2019-datacenter-smalldisk" `
+    -Version "latest" `
+    -StorageBlobURI $StorageContext.BlobEndPoint `
+    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+	
+# SP-01 VM ( Sharepoint 2013)
+#=======================
+#New-AzureLabVM `
+#   -VMName "SP-01" `
+#   -Location $Location `
+#   -ResourceGroupName $ResourceGroupName `
+#   -VNETId $VNETSubID `
+#   -VNETSGId $INTVNETSG.Id `
+#   -VMSize "Standard_D2_v3" `
+#   -PrivateIP '192.168.0.56' `
+#   -LocalAdmin $Credentials `
+#   -Publisher "MicrosoftSharePoint" `
+#   -Offer "MicrosoftSharePointServer" `
+#   -SKU "2013" `
+#   -Version "latest" `
+#   -StorageBlobURI $StorageContext.BlobEndPoint `
+#   -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# SQL-01 VM (2016)
+#=======================
+#New-AzureLabVM `
+#    -VMName "SQL16-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_D2_v3" `
+#    -PrivateIP '192.168.0.58' `
+#    -LocalAdmin $Credentials `
+#    -Publisher "MicrosoftSQLServer" `
+#    -Offer "SQL2016SP2-WS2016" `
+#    -SKU "Standard" `
+#    -Version "latest" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# SharePoint-01 VM (2016)
+#=======================
+#New-AzureLabVM `
+#    -VMName "SP16-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_D2_v3" `
+#    -PrivateIP '192.168.0.60' `
+#    -LocalAdmin $Credentials `
+#    -Publisher "MicrosoftSharePoint" `
+#    -Offer "MicrosoftSharePointServer" `
+#    -SKU "2016" `
+#    -Version "latest" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# MFA-01 VM
+#=================
+#New-AzureLabVM `
+#    -VMName "MFA-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_A1" `
+#    -PrivateIP '192.168.0.62' `
+#    -LocalAdmin $Credentials `
+#    -SKU "2012-r2-datacenter-smalldisk" `
+#    -Version "latest" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+	
+# APP-01 VM
+#=================
+#New-AzureLabVM `
+#    -VMName "APP-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_A1" `
+#    -PrivateIP '192.168.0.64' `
+#    -LocalAdmin $Credentials `
+#    -SKU "2012-r2-datacenter-smalldisk" `
+#    -Version "latest" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+	
+# SUSE VM
+#==================
+#New-AzureLabVM `
+#    -VMName "SUSE-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_A1" `
+#    -PrivateIP '192.168.0.66' `
+#    -LocalAdmin $Credentials `
+#    -SKU "11-SP4" `
+#    -Version "latest" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint
+
+# RDS-01 VM
+#==================
+#New-AzureLabVM `
+#    -VMName "RDS-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_B2ms" `
+#    -PrivateIP '192.168.0.68' `
+#    -LocalAdmin $Credentials `
+#    -SKU "2019-datacenter-smalldisk" `
+#    -Version "latest" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+	
+# NDES-01 VM
+#==================
+#New-AzureLabVM `
+#    -VMName "NDES-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_A1" `
+#    -PrivateIP '192.168.0.72' `
+#    -LocalAdmin $Credentials `
+#    -SKU "2012-r2-datacenter-smalldisk" `
+#    -Version "latest" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# PINGFed-01 VM
+#==================
+#New-AzureLabVM `
+#    -VMName "PINGFed-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_A1" `
+#    -PrivateIP '192.168.0.74' `
+#    -LocalAdmin $Credentials `
+#    -SKU "2012-r2-datacenter-smalldisk" `
+#    -Version "latest" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# TMG VM
+#==================
+#New-AzureLabVM `
+#    -VMName "TMG-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_A1" `
+#    -PrivateIP '192.168.0.76' `
+#    -LocalAdmin $Credentials `
+#    -SKU "2008-R2-SP1-smalldisk" `
+#    -Version "latest" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# 2008r2-01 VM
+#==================
+#New-AzureLabVM `
+#    -VMName "2008r2-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_A1" `
+#    -PrivateIP '192.168.0.78' `
+#    -LocalAdmin $Credentials `
+#    -SKU "2008-R2-SP1-smalldisk" `
+#    -Version "latest" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# Microsoft Identity Manager
+#==================
+#New-AzureLabVM `
+#    -VMName "MIM-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_D2_v3" `
+#    -PrivateIP '192.168.0.80' `
+#    -LocalAdmin $Credentials `
+#    -SKU "2012-r2-datacenter" `
+#    -Version "latest" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# ARR-01 VM
+#=================
+#New-AzureLabVM `
+#    -VMName "ARR-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_A1" `
+#    -PrivateIP '192.168.0.82' `
+#    -LocalAdmin $Credentials `
+#    -SKU "2012-r2-datacenter-smalldisk" `
+#    -Version "latest" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# Windows 10 - AADJ (Not joined to lcoal domain)
+#=======================
+#New-AzureLabVM `
+#    -VMName "W10-02" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_B2ms" `
+#    -PrivateIP '192.168.0.90' `
+#    -LocalAdmin $Credentials `
+#    -Publisher "MicrosoftVisualStudio" `
+#    -Offer "windows" `
+#    -SKU "Windows-10-N-x64" `
+#    -Version "latest" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint `
+
+# Windows 8.1
+#=======================
+#New-AzureLabVM `
+#    -VMName "W8-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_B2ms" `
+#    -PrivateIP '192.168.0.92' `
+#    -LocalAdmin $Credentials `
+#    -Publisher "MicrosoftVisualStudio" `
+#    -Offer "windows" `
+#    -SKU "Win81-Ent-N-x64" `
+#    -Version "latest" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint `
+
+# Windows 7
+#=======================
+#New-AzureLabVM `
+#    -VMName "W7-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_B2ms" `
+#    -PrivateIP '192.168.0.94' `
+#    -LocalAdmin $Credentials `
+#    -Publisher "MicrosoftVisualStudio" `
+#    -Offer "windows" `
+#    -SKU "Win7-SP1-Ent-N-x64" `
+#    -Version "latest" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint `
+
+# WAC-01 VM
+#==================
+#New-AzureLabVM `
+#    -VMName "WAC-01" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_B2ms" `
+#    -PrivateIP '192.168.0.96' `
+#    -LocalAdmin $Credentials `
+#    -SKU "2019-datacenter-smalldisk" `
+#    -Version "latest" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# EXCH16-16 VM
+#==================
+#New-AzureLabVM `
+#    -VMName "EXCH-16" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_D3_v2" `
+#    -PrivateIP '192.168.0.98' `
+#    -LocalAdmin $Credentials `
+#    -SKU "2012-R2-Datacenter" `
+#    -Version "latest" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# EXCH-16 VM
+#==================
+#New-AzureLabVM `
+#    -VMName "EXCH-16" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_D3_v2" `
+#    -PrivateIP '192.168.0.100' `
+#    -LocalAdmin $Credentials `
+#    -SKU "2016-Datacenter" `
+#    -Version "latest" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# Windows 10 - 1709 domain joined
+#=======================
+#New-AzureLabVM `
+#    -VMName "W10-1709-dj" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_B2ms" `
+#    -PrivateIP '192.168.0.102' `
+#    -LocalAdmin $Credentials `
+#    -Publisher "MicrosoftVisualStudio" `
+#    -Offer "windows" `
+#    -SKU "Windows-10-N-x64" `
+#    -Version "2018.08.17" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint `
+#    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
+# Windows 10 - 1709 Not domain joined
+#=======================
+#New-AzureLabVM `
+#    -VMName "W10-1709" `
+#    -Location $Location `
+#    -ResourceGroupName $ResourceGroupName `
+#    -VNETId $VNETSubID `
+#    -VNETSGId $INTVNETSG.Id `
+#    -VMSize "Standard_B2ms" `
+#    -PrivateIP '192.168.0.104' `
+#    -LocalAdmin $Credentials `
+#    -Publisher "MicrosoftVisualStudio" `
+#    -Offer "windows" `
+#    -SKU "Windows-10-N-x64" `
+#    -Version "2018.08.17" `
+#    -StorageBlobURI $StorageContext.BlobEndPoint
+
+# Windows 10 - Latest v. domain joined
+#=======================
+New-AzureLabVM `
+    -VMName "W10-01" `
+    -Location $Location `
+    -ResourceGroupName $ResourceGroupName `
+    -VNETId $VNETSubID `
+    -VNETSGId $INTVNETSG.Id `
+    -VMSize "Standard_B2ms" `
+    -PrivateIP '192.168.0.106' `
+    -LocalAdmin $Credentials `
+    -Publisher "MicrosoftVisualStudio" `
+    -Offer "windows" `
+    -SKU "Windows-10-N-x64" `
+    -Version "latest" `
+    -StorageBlobURI $StorageContext.BlobEndPoint `
+    -JoinDomain -DomainName $ADForestName -DomainAdmin $ForestCreds
+
 # Call nGRemote function
-Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
+Write-Host "[REMOTE]:" -ForegroundColor Yellow -NoNewline
 Write-Host " RDP to VMs " -ForegroundColor Cyan -NoNewline
 Write-Host " - Generating VM collection for nGRemote Desktop Manager...." -NoNewline
 New-AzureVmRdg $ResourceGroupName -WA 0 | Out-Null
