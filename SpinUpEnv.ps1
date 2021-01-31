@@ -1,12 +1,12 @@
 # Globals  
 #########################################################################################################
 
-$ResourceGroupOwner = "Rodney"  # Name of resource group owner - Must be unique within a subscription or will prompt to update an exisiting Resource Group
-$labPrefix = "contoso"  # Must be unique & and alphanumeric only, to support Storage account naming constraints. I.e. Must be unique Azure wide and max 21 chars
+$ResourceGroupOwner = "Rainier"  # Name of resource group owner - Must be unique within a subscription or will prompt to update an exisiting Resource Group
+$labPrefix = "Wacketywack"  # Must be unique & and alphanumeric only, to support Storage account naming constraints. I.e. Must be unique Azure wide and max 21 chars
 $DCName = "DC-01"   
-$ADForestName = "contoso.com"
+$ADForestName = "wacketywack.local"
 $VNetIPBlock = "192.168.0.0/24" # Try and avoid overlapping between VNets in different RGs within a subscription, by occupying diffrent 3rd octet if poss
-$LANSubnetIPBlock = "192.168.0.0/25" # Provide 108 hosts, leaving some for GW SNet
+$LANSubnetIPBlock = "192.168.0.0/25" # Provides 108 hosts, leaving some for a GW SNet
 
 ## - As storage account name needs to be unique in Azure, script will use lab prefix and append random number if "$labprefix+"storage" name is already used. E.g. Contosostorage
 ## - Some resources such as automation accounts are defined by name and can only exist once, Azure wide. Therefore Lab prefix must be different for every new enviroment being spun-up.
@@ -200,7 +200,6 @@ Function New-AzureLabVM {
             #=========
             Write-Host "[CREATEVM]: " -ForegroundColor Yellow -NoNewline
             Write-Host "$VMName" -ForegroundColor Cyan -NoNewline
-            #Write-Host " - Provision VM....`n" -NoNewline
             Write-Host " - Provision VM...." -NoNewline
             New-AzVM -ResourceGroupName $ResourceGroupName -Location $Location -VM $VM | out-null
             Write-Host "Done" -ForegroundColor Green
@@ -217,6 +216,8 @@ Function New-AzureLabVM {
                 Write-Host "domain...." -NoNewline
 
                 Set-AzVMExtension -VMName $VMName -ResourceGroupName $ResourceGroupName -Name "JoinAD" -ExtensionType "JsonADDomainExtension" -Publisher "Microsoft.Compute" -TypeHandlerVersion "1.0" -Location $Location -Settings @{ "Name" = $domainName; "OUPath" = ""; "User" = "$($DomainAdmin.Username)@$domainName"; "Restart" = "true"; "Options" = 3} -ProtectedSettings @{"Password" = "$($DomainAdmin.GetNetworkCredential().Password)"} | out-null
+				
+				Write-Host "Done" -ForegroundColor Green
             }
       
                 if ($VMName -eq $DCName) {
@@ -1596,5 +1597,5 @@ invoke-item "$home\Desktop\AzureRDG\"
 ## Disconnect from Azure Account
 Write-Host "[MAIN]:" -ForegroundColor Yellow -NoNewline
 Write-Host " Disconnecting from Azure...." -ForegroundColor white -NoNewline
-Disconnect-AzAccount | Out-Null
+#Disconnect-AzAccount | Out-Null
 Write-Host "Done`n" -ForegroundColor Green
